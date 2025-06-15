@@ -10,7 +10,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"rear/internal/config"
+	"rear/internal/db"
 	"rear/internal/model"
+	"rear/internal/repositories"
 	"rear/internal/router"
 	"rear/internal/service"
 	"rear/pkg/logger"
@@ -27,6 +30,53 @@ func main() {
 	}
 
 	// 数据库初始化
+	if err := db.InitDatabase(); err != nil {
+		log.Fatal("Failed to initialize database:", err)
+	}
+
+	// 自动迁移
+	if err := db.AutoMigrate(); err != nil {
+		log.Fatal("Failed to migrate database:", err)
+	}
+
+	// 初始化基础服务（启动写操作处理协程）
+	repositories.InitBaseService()
+
+	// 使用示例
+	userService := repositories.NewUserService()
+
+	// 创建用户
+	user := &model.User{
+		Email:    "john@example.com",
+		Username: "John Doe",
+		Age:      25,
+	}
+
+	if err := userService.CreateUser(user); err != nil {
+		log.Printf("Failed to create user: %v", err)
+	} else {
+		log.Printf("User created successfully: %+v", user)
+	}
+
+	// 更新用户名称
+	if err := userService.UpdateUserName(user.ID, "John Smith"); err != nil {
+		log.Printf("Failed to update user name: %v", err)
+	}
+
+	// 查询用户（可以并发执行）
+	if foundUser, err := userService.GetUserByID(user.ID); err != nil {
+		log.Printf("Failed to get user: %v", err)
+	} else if foundUser != nil {
+		log.Printf("Found user: %+v", foundUser)
+	}
+
+	// 获取所有用户
+	if users, err := userService.GetAllUsers(); err != nil {
+		log.Printf("Failed to get all users: %v", err)
+	} else {
+		log.Printf("Total users: %d", len(users))
+	}
+
 	//if err := initDatabase(); err != nil {
 	//	logger.Fatalf("Failed to initialize database: %v", err)
 	//}
@@ -38,7 +88,7 @@ func main() {
 
 func startHttp() {
 	// 配置加载
-	netConfig := model.InitConfig()
+	netConfig := config.InitConfig()
 	// 设置Gin模式
 	gin.SetMode(netConfig.Mode)
 

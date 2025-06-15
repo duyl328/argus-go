@@ -3,8 +3,10 @@ package handler
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"log"
 	"net/http"
 	"rear/internal/model"
+	"rear/internal/repositories"
 )
 
 // 全局变量
@@ -58,8 +60,8 @@ func GetUserByID(c *gin.Context) {
 // InitSampleData 初始化示例数据
 func InitSampleData() {
 	Users = []model.User{
-		{ID: 1, Name: "John Doe", Email: "john@example.com"},
-		{ID: 2, Name: "Jane Smith", Email: "jane@example.com"},
+		{Username: "John Doe", Email: "john@example.com"},
+		{Username: "Jane Smith", Email: "jane@example.com"},
 	}
 	userNextID = 3
 }
@@ -99,11 +101,26 @@ func UpdateUser(c *gin.Context) {
 
 // GetUsers 获取所有用户
 func GetUsers(c *gin.Context) {
-	c.JSON(http.StatusOK, model.Response{
-		Code:    http.StatusOK,
-		Message: "Success",
-		Data:    Users,
-	})
+	// 使用示例
+	userService := repositories.NewUserService()
+
+	if users, err := userService.GetAllUsers(); err != nil {
+		log.Printf("Failed to get all users: %v", err)
+	} else {
+		log.Printf("Total users: %d", len(users))
+		c.JSON(http.StatusOK, model.Response{
+			Code:    http.StatusOK,
+			Message: "Success",
+			Data:    users,
+		})
+
+	}
+
+	//c.JSON(http.StatusOK, model.Response{
+	//	Code:    http.StatusOK,
+	//	Message: "Success",
+	//	Data:    Users,
+	//})
 }
 
 // CreateUser 创建用户
@@ -118,7 +135,7 @@ func CreateUser(c *gin.Context) {
 	}
 
 	// 简单验证
-	if user.Name == "" || user.Email == "" {
+	if user.Username == "" || user.Email == "" {
 		c.JSON(http.StatusBadRequest, model.Response{
 			Code:    http.StatusBadRequest,
 			Message: "Name and email are required",
@@ -126,7 +143,6 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	user.ID = userNextID
 	userNextID++
 	Users = append(Users, user)
 
