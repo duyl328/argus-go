@@ -2,16 +2,20 @@ package router
 
 import (
 	"github.com/gin-gonic/gin"
+	"rear/internal/container"
 	"rear/internal/handler"
 )
 
-// 设置路由
-func SetupRoutes(r *gin.Engine) {
+// SetupRoutes 设置路由
+func SetupRoutes(r *gin.Engine, contain *container.Container) {
 	// 默认访问
 	r.GET("/", handler.BasicResponse)
 
 	// 健康检查
 	r.GET("/health", handler.HealthCheck)
+
+	// 资料库处理
+	libraryHandler := handler.NewLibraryHandler(contain)
 
 	// API版本组
 	v1 := r.Group("/api/v1")
@@ -24,6 +28,14 @@ func SetupRoutes(r *gin.Engine) {
 			users.POST("", handler.CreateUser)
 			users.PUT("/:id", handler.UpdateUser)
 			users.DELETE("/:id", handler.DeleteUser)
+		}
+		// 存储库相关
+		library := v1.Group("/library")
+		{
+			library.GET("", libraryHandler.GetLibrary)
+			library.POST("", libraryHandler.AddLibrary)
+			library.PUT("/:path", libraryHandler.UpdateLibrary)
+			library.DELETE("/:path", libraryHandler.DeleteLibrary)
 		}
 	}
 }

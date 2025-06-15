@@ -18,6 +18,7 @@ type BaseService struct {
 }
 
 var baseService = &BaseService{
+	// 缓冲队列
 	writeQueue: make(chan WriteOperation, 1000),
 }
 
@@ -31,8 +32,8 @@ func InitBaseService() {
 // 处理写操作的协程
 func (s *BaseService) processWriteOperations() {
 	for op := range s.writeQueue {
-		err := op.Execute()
-		op.Response <- err
+		err := op.Execute() // 串行执行每个写操作
+		op.Response <- err  // 将结果返回给调用者
 		close(op.Response)
 	}
 }
@@ -50,8 +51,8 @@ func ExecuteWrite(fn func() error) error {
 		Response: make(chan error, 1),
 	}
 
-	baseService.writeQueue <- op
-	return <-op.Response
+	baseService.writeQueue <- op // 将操作放入队列
+	return <-op.Response         // 等待执行结果
 }
 
 // ExecuteRead 执行读操作（可以并发）

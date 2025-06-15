@@ -30,6 +30,24 @@ func (s *UserService) UpdateUser(id uint, updates map[string]interface{}) error 
 	})
 }
 
+/*
+Model() 方法的作用
+1. 指定操作的表和模型
+2. 表名推断
+
+✅ 正确写法1：使用 Model()
+goreturn db.GetDB().Model(&model.User{}).
+    Where("id = ?", id).
+    Update("name", name).Error
+✅ 正确写法2：直接使用结构体实例
+goreturn db.GetDB().Where("id = ?", id).
+    Updates(&model.User{Name: name}).Error
+✅ 正确写法3：使用 Table() 指定表名
+goreturn db.GetDB().Table("users").
+    Where("id = ?", id).
+    Update("name", name).Error
+*/
+
 // 更新用户名称（写操作）
 func (s *UserService) UpdateUserName(id uint, name string) error {
 	return ExecuteWrite(func() error {
