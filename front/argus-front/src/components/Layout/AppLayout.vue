@@ -4,12 +4,12 @@
     <n-layout-header bordered class="layout-header">
       <div class="header-content">
         <!-- 左侧 Logo 和标题 -->
-        <div class="header-left">
+        <router-link to="/" class="header-left no-select">
           <n-icon size="32" class="logo-icon">
             <img src="@/assets/logo.svg" alt="logo" />
           </n-icon>
-          <span class="site-title">标题</span>
-        </div>
+          <span class="site-title">Argus</span>
+        </router-link>
 
         <!-- 中间搜索框 -->
         <div class="header-center">
@@ -42,7 +42,7 @@
         show-trigger
         collapse-mode="width"
         :collapsed-width="64"
-        :width="240"
+        :width="290"
         :native-scrollbar="false"
         class="layout-sider"
       >
@@ -71,7 +71,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, h } from 'vue'
+import { ref, watch, computed, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NMenu, NIcon } from 'naive-ui'
 import {
@@ -137,25 +137,31 @@ const menuOptionsWithIcons = computed(() => {
   })
 })
 
-// 当前激活的菜单项
-const activeKey = computed(() => {
-  const currentPath = route.path
-  // 从菜单选项中找到匹配当前路径的key
-  for (const option of menuOptions) {
-    if ('children' in option) {
-      for (const child of option.children) {
-        if (child.path === currentPath) {
-          return child.key
+const activeKey = ref('')
+// 监听路由变化，更新activeKey
+watch(
+  () => route.path,
+  (currentPath) => {
+    // 从菜单选项中找到匹配当前路径的key
+    for (const option of menuOptions) {
+      if ('children' in option) {
+        for (const child of option.children) {
+          if (child.path === currentPath) {
+            activeKey.value = child.key
+            return
+          }
+        }
+      } else {
+        if (option.path === currentPath) {
+          activeKey.value = option.key
+          return
         }
       }
-    } else {
-      if (option.path === currentPath) {
-        return option.key
-      }
     }
-  }
-  return ''
-})
+    activeKey.value = ''
+  },
+  { immediate: true },
+)
 
 // 处理菜单选择
 const handleMenuSelect = (key: string) => {
@@ -184,11 +190,6 @@ const handleMenuSelect = (key: string) => {
   }
 }
 </script>
-<style>
-:root {
-  --header-height: 64px;
-}
-</style>
 <style scoped>
 .layout-container {
   height: 100vh;
@@ -216,6 +217,12 @@ const handleMenuSelect = (key: string) => {
   align-items: center;
   flex-shrink: 0;
   min-width: 200px;
+  cursor: pointer;
+}
+
+.header-left:hover {
+  opacity: 0.8;
+  transition: opacity 0.2s;
 }
 
 .logo-icon {
@@ -264,6 +271,7 @@ const handleMenuSelect = (key: string) => {
 .layout-sider {
   height: 100%;
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
+  margin-left: 7px;
 }
 
 .sidebar-menu {

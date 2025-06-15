@@ -1,0 +1,51 @@
+{
+  "id": "4810610",
+  "name": "argus",
+  "font_family": "iconfont",
+  "css_prefix_text": "icon-",
+  "description": "",
+  "glyphs": [
+    {
+      "icon_id": "2743897",
+      "name": "重新开始",
+      "font_class": "zhongxinkaishi",
+      "unicode": "e648",
+      "unicode_decimal": 58952
+    },
+    {
+      "icon_id": "29849119",
+      "name": "重新",
+      "font_class": "zhongxin",
+      "unicode": "e7a8",
+      "unicode_decimal": 59304
+    },
+    {
+      "icon_id": "375868",
+      "name": "体质辨别-重新测试",
+      "font_class": "tizhibianbiezhongxinceshi",
+      "unicode": "e629",
+      "unicode_decimal": 58921
+    },
+    {
+      "icon_id": "830289",
+      "name": "箭头-左",
+      "font_class": "jiantouzuo",
+      "unicode": "e659",
+      "unicode_decimal": 58969
+    },
+    {
+      "icon_id": "15726826",
+      "name": "箭头 右",
+      "font_class": "jiantouyou",
+      "unicode": "e61c",
+      "unicode_decimal": 58908
+    },
+    {
+      "icon_id": "4430546",
+      "name": "重新加载",
+      "font_class": "zhongxinjiazai",
+      "unicode": "e7b8",
+      "unicode_decimal": 59320
+    }
+  ]
+}

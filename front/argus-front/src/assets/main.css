@@ -1,5 +1,15 @@
-*{
+@import "base.css";
+@import "var.css";
+* {
   margin: 0;
   padding: 0;
   list-style: none;
+  text-decoration: none;
+}
+/* 禁止选中 */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;  /* Safari */
+  -moz-user-select: none;     /* Firefox */
+  -ms-user-select: none;      /* IE10+/Edge */
 }
