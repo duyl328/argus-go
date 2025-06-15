@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"bytes"
 	"github.com/gin-gonic/gin"
+	"io"
 	"log"
 	"net/http"
 	"rear/internal/container"
@@ -38,14 +40,30 @@ func (h *Handler) GetLibrary(c *gin.Context) {
 }
 
 func (h *Handler) AddLibrary(c *gin.Context) {
-	var path string
-	if err := c.ShouldBindJSON(&path); err != nil {
+	// 定义请求体结构
+	type AddLibraryRequest struct {
+		Path string `json:"path"`
+	}
+
+	var req AddLibraryRequest
+
+	// 读取原始JSON数据（用于调试）
+	rawData, _ := c.GetRawData()
+	// 重新设置请求体，因为GetRawData()会消耗掉body
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(rawData))
+
+	// 绑定JSON到结构体
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, model.Response{
 			Code:    http.StatusBadRequest,
 			Message: "Invalid request body",
 		})
 		return
 	}
+
+	// 现在可以使用 req.Path
+	path := req.Path
+
 	library := &model.LibraryTable{
 		ImgPath:  path,
 		IsEnable: true,

@@ -14,14 +14,14 @@ func NewLibraryRepository() *LibraryRepository {
 func (s *LibraryRepository) AddLibrary(lib *model.LibraryTable) error {
 	var result model.LibraryTable
 
-	err := db.GetDB().Where("imgPath = ?", lib.ImgPath).FirstOrCreate(&result, lib).Error
+	err := db.GetDB().Where("img_path = ?", lib.ImgPath).FirstOrCreate(&result, lib).Error
 	if err != nil {
 		return err
 	}
 	return ExecuteWrite(func() error {
 		// 如果找到了已存在的记录，更新 IsEnable
 		if result.ID != 0 && result.ImgPath == lib.ImgPath {
-			return db.GetDB().Model(&result).Update("isEnable", true).Error
+			return db.GetDB().Model(&result).Update("is_enable", true).Error
 		}
 
 		return nil
@@ -33,13 +33,13 @@ func (s *LibraryRepository) AddLibrary(lib *model.LibraryTable) error {
 
 func (s *LibraryRepository) DeleteLibrary(imgPath string) error {
 	return ExecuteWrite(func() error {
-		return db.GetDB().Where("imgPath = ?", imgPath).Delete(&model.LibraryTable{}).Error
+		return db.GetDB().Where("img_path = ?", imgPath).Delete(&model.LibraryTable{}).Error
 	})
 }
 
 func (s *LibraryRepository) UpdateLibrary(oldImgPath string, newImgPath string) error {
 	return ExecuteWrite(func() error {
-		return db.GetDB().Where("imgPath = ?", oldImgPath).
+		return db.GetDB().Where("img_path = ?", oldImgPath).
 			Updates(&model.LibraryTable{ImgPath: newImgPath}).Error
 	})
 }

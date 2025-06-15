@@ -20,6 +20,7 @@ func SetupRoutes(r *gin.Engine, contain *container.Container) {
 	// API版本组
 	v1 := r.Group("/api/v1")
 	{
+		v1.GET("", handler.BasicResponseV1)
 		// 用户相关路由
 		users := v1.Group("/users")
 		{

@@ -19,14 +19,17 @@ func HealthCheck(c *gin.Context) {
 	})
 }
 
-// BasicResponse  健康检查
 func BasicResponse(c *gin.Context) {
 	c.JSON(http.StatusOK, model.Response{
 		Code:    http.StatusOK,
 		Message: "OK",
-		Data: map[string]interface{}{
-			"timestamp": time.Now().Unix(),
-			"version":   "1.0.0",
-		},
+		Data:    "hi",
+	})
+}
+func BasicResponseV1(c *gin.Context) {
+	c.JSON(http.StatusOK, model.Response{
+		Code:    http.StatusOK,
+		Message: "OK",
+		Data:    "hi, this is v1",
 	})
 }
