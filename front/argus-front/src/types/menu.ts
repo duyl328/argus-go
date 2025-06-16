@@ -65,6 +65,12 @@ export const menuOptions: MenuOption[] = [
     icon: 'pricetag-outline',
     path: '/tags',
   },
+  {
+    key: 'similar',
+    label: '相似照片',
+    icon: 'eye-off-outline',
+    path: '/similar',
+  },
 
   // 管理分组
   {

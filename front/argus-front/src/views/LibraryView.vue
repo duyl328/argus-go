@@ -23,44 +23,22 @@ const libraryPaths = ref<LibraryPath[]>([
 ])
 
 // 选择文件夹
-// const selectFolder = async () => {
-//   // 这里应该调用 Electron 或其他桌面框架的文件选择 API
-//   // 示例代码，实际需要根据你的环境调整
-//   try {
-//     // const result = await window.electronAPI.selectFolder()
-//     // if (result) {
-//     //   inputPath.value = result
-//     // }
-//
-//     // 临时模拟
-//     inputPath.value = 'C:\\Users\\Documents\\示例路径'
-//     message.info('请在实际环境中实现文件夹选择功能')
-//   } catch (error) {
-//     message.error('选择文件夹失败')
-//   }
-// }
-
-
-// 选择文件夹（使用浏览器 File System Access API）
 const selectFolder = async () => {
+  // 这里应该调用 Electron 或其他桌面框架的文件选择 API
+  // 示例代码，实际需要根据你的环境调整
   try {
-    // 检查浏览器是否支持
-    if (!('showDirectoryPicker' in window)) {
-      message.warning('您的浏览器不支持文件夹选择功能，请手动输入路径')
-      return
-    }
+    // const result = await window.electronAPI.selectFolder()
+    // if (result) {
+    //   inputPath.value = result
+    // }
 
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    //@ts-expect-error
-    const dirHandle = await window.showDirectoryPicker()
-    // 获取文件夹名称作为路径（实际项目中可能需要完整路径）
-    inputPath.value = dirHandle.name
-  } catch (err) {
-    // 用户取消选择
-    console.log('用户取消选择文件夹')
+    // 临时模拟
+    // inputPath.value = 'C:\\Users\\Documents\\示例路径'
+    message.error('该功能暂不可用!')
+  } catch (error) {
+    message.error('选择文件夹失败')
   }
 }
-
 
 // 添加路径
 const addPath = async () => {

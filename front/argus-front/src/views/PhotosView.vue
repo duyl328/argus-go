@@ -1,5 +1,5 @@
 ﻿<template>
-  <h1>照片！！！！！11</h1>
+  <h1>11</h1>
 </template>
 
 <script setup lang="ts"></script>

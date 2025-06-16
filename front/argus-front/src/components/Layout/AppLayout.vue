@@ -83,7 +83,7 @@ import {
   CalendarOutline,
   PricetagOutline,
   LibraryOutline,
-  SettingsOutline,
+  SettingsOutline, EyeOffOutline
 } from '@vicons/ionicons5'
 import { menuOptions, type MenuOption, type MenuItem, type MenuGroup } from '@/types/menu'
 
@@ -101,6 +101,7 @@ const iconMap = {
   'pricetag-outline': PricetagOutline,
   'library-outline': LibraryOutline,
   'settings-outline': SettingsOutline,
+  'eye-off-outline': EyeOffOutline,
 }
 
 // 渲染图标
