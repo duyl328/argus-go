@@ -72,7 +72,16 @@ class HttpClient {
     // 请求拦截器
     this.axiosInstance.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
-        console.group("请求链接: "+config.url);
+        console.group(
+          '请求链接: ' +
+            config.url +
+            '  ' +
+            config.method?.toUpperCase() +
+            '  params: ' +
+            JSON.stringify(config.params) +
+            ',  data: ' +
+            JSON.stringify(config.data),
+        )
         // 防止重复请求
         this.addPending(config)
 
@@ -109,7 +118,7 @@ class HttpClient {
         // 统一处理响应数据
         const { data } = response
 
-        console.groupEnd();
+        console.groupEnd()
         if (data.success || data.code === 200) {
           return response
         } else {
@@ -125,7 +134,7 @@ class HttpClient {
 
         // 统一错误处理
         this.handleError(error)
-        console.groupEnd();
+        console.groupEnd()
         return Promise.reject(error)
       },
     )

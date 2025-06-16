@@ -2,7 +2,8 @@
 import { httpClient } from '@/utils/http.ts'
 import { CloseOutline, FolderOutline, CheckmarkCircle, EllipseOutline } from '@vicons/ionicons5'
 import { onMounted, ref } from 'vue'
-import { NSpace, NInput, NButton, NIcon, NTag,  NCard, NEmpty, useMessage } from 'naive-ui'
+import { NSpace, NInput, NButton, NIcon, NTag, NCard, NEmpty, useMessage } from 'naive-ui'
+import type { LibraryTable } from '@/model/libraryTable.ts'
 
 // 消息提示
 const message = useMessage()
@@ -17,10 +18,7 @@ interface LibraryPath {
   enabled: boolean
 }
 
-const libraryPaths = ref<LibraryPath[]>([
-  { id: '1', path: 'C:\\Users\\Documents\\教师资料', enabled: true },
-  { id: '2', path: 'D:\\程序员学习资料', enabled: true }
-])
+const libraryPaths = ref<LibraryPath[]>([])
 
 // 选择文件夹
 const selectFolder = async () => {
@@ -48,7 +46,7 @@ const addPath = async () => {
   }
 
   // 检查是否已存在
-  if (libraryPaths.value.some(item => item.path === inputPath.value)) {
+  if (libraryPaths.value.some((item) => item.path === inputPath.value)) {
     message.warning('该路径已存在')
     return
   }
@@ -56,14 +54,14 @@ const addPath = async () => {
   try {
     // 发送到后端
     const response = await httpClient.post('/v1/library', {
-      path: inputPath.value
+      path: inputPath.value,
     })
 
     // 添加到列表
     libraryPaths.value.push({
       id: Date.now().toString(),
       path: inputPath.value,
-      enabled: true
+      enabled: true,
     })
 
     // 清空输入
@@ -80,8 +78,9 @@ const toggleEnabled = async (item: LibraryPath) => {
     item.enabled = !item.enabled
 
     // 发送到后端
-    await httpClient.put(`/api/library/${item.id}`, {
-      enabled: item.enabled
+    await httpClient.put(`/v1/library`, {
+      path: encodeURIComponent(item.path),
+      enabled: item.enabled,
     })
 
     message.success(item.enabled ? '已启用' : '已禁用')
@@ -95,11 +94,14 @@ const toggleEnabled = async (item: LibraryPath) => {
 // 删除路径
 const removePath = async (item: LibraryPath) => {
   try {
+    console.log(item.path)
     // 发送到后端
-    await httpClient.delete(`/api/library/${item.id}`)
+    await httpClient.delete(`/v1/library`, {
+      path: encodeURIComponent(item.path),
+    })
 
     // 从列表中移除
-    const index = libraryPaths.value.findIndex(p => p.id === item.id)
+    const index = libraryPaths.value.findIndex((p) => p.id === item.id)
     if (index > -1) {
       libraryPaths.value.splice(index, 1)
     }
@@ -112,8 +114,9 @@ const removePath = async (item: LibraryPath) => {
 
 // 开始任务
 const startTask = async () => {
-  const enabledPaths = libraryPaths.value.filter(item => item.enabled)
-
+  const enabledPaths = libraryPaths.value.filter((item) => item.enabled)
+  message.error('创建任务失败')
+  return
   if (enabledPaths.length === 0) {
     message.warning('请至少选择一个启用的路径')
     return
@@ -121,7 +124,7 @@ const startTask = async () => {
 
   try {
     const response = await httpClient.post('/api/task/create', {
-      paths: enabledPaths.map(item => item.path)
+      paths: enabledPaths.map((item) => item.path),
     })
 
     message.success('任务已创建，正在处理中...')
@@ -131,8 +134,15 @@ const startTask = async () => {
 }
 
 onMounted(() => {
-  httpClient.get("v1/library").then((res) => {
-    console.log(res);
+  httpClient.get('v1/library').then((res) => {
+    const data = res.data as LibraryTable[]
+    data.forEach((item) => {
+      libraryPaths.value.push({
+        id: item.id.toString(),
+        path: item.img_path,
+        enabled: item.is_enable,
+      })
+    })
   })
 })
 </script>
@@ -153,22 +163,10 @@ onMounted(() => {
             <n-icon :component="FolderOutline" />
           </template>
           <template #suffix>
-            <n-button
-              type="tertiary"
-              size="small"
-              @click="selectFolder"
-            >
-              选择文件夹
-            </n-button>
+            <n-button type="tertiary" size="small" @click="selectFolder"> 选择文件夹</n-button>
           </template>
         </n-input>
-        <n-button
-          type="primary"
-          size="large"
-          @click="addPath"
-        >
-          添加
-        </n-button>
+        <n-button type="primary" size="large" @click="addPath"> 添加</n-button>
       </n-space>
     </n-card>
 
