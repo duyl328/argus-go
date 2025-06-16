@@ -1,13 +1,14 @@
 package handler
 
 import (
-	"bytes"
-	"github.com/gin-gonic/gin"
-	"io"
+	"fmt"
 	"log"
 	"net/http"
 	"rear/internal/container"
 	"rear/internal/model"
+	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {
@@ -18,7 +19,7 @@ func NewLibraryHandler(container *container.Container) *Handler {
 	return &Handler{container: container}
 }
 
-// GetLibrary 获取存储哭
+// GetLibrary 获取存储
 func (h *Handler) GetLibrary(c *gin.Context) {
 	libraries, err := h.container.LibraryRepo.GetAllLibrary()
 	if err != nil {
@@ -38,39 +39,39 @@ func (h *Handler) GetLibrary(c *gin.Context) {
 		Data:    libraries,
 	})
 }
-
 func (h *Handler) AddLibrary(c *gin.Context) {
-	// 定义请求体结构
 	type AddLibraryRequest struct {
 		Path string `json:"path"`
 	}
 
 	var req AddLibraryRequest
 
-	// 读取原始JSON数据（用于调试）
-	rawData, _ := c.GetRawData()
-	// 重新设置请求体，因为GetRawData()会消耗掉body
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(rawData))
-
 	// 绑定JSON到结构体
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, model.Response{
 			Code:    http.StatusBadRequest,
-			Message: "Invalid request body",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
 		})
 		return
 	}
 
-	// 现在可以使用 req.Path
-	path := req.Path
+	// 验证路径
+	path := strings.TrimSpace(req.Path)
+	if path == "" {
+		c.JSON(http.StatusBadRequest, model.Response{
+			Code:    http.StatusBadRequest,
+			Message: "Path cannot be empty",
+		})
+		return
+	}
 
 	library := &model.LibraryTable{
 		ImgPath:  path,
 		IsEnable: true,
 	}
-	err := h.container.LibraryRepo.AddLibrary(library)
-	if err != nil {
-		c.JSON(http.StatusOK, model.Response{
+
+	if err := h.container.LibraryRepo.AddLibrary(library); err != nil {
+		c.JSON(http.StatusInternalServerError, model.Response{
 			Code:    http.StatusInternalServerError,
 			Message: err.Error(),
 		})
@@ -83,22 +84,26 @@ func (h *Handler) AddLibrary(c *gin.Context) {
 		Data:    nil,
 	})
 }
+
 func (h *Handler) UpdateLibrary(c *gin.Context) {
-	var path string
-	if err := c.ShouldBindJSON(&path); err != nil {
+	type UpdateLibraryRequest struct {
+		Path     string `json:"path"`
+		IsEnable bool   `json:"is_enable"`
+	}
+
+	var req UpdateLibraryRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Path) == "" {
 		c.JSON(http.StatusBadRequest, model.Response{
 			Code:    http.StatusBadRequest,
-			Message: "Invalid request body",
+			Message: "Invalid request body or missing path",
 		})
 		return
 	}
-	library := &model.LibraryTable{
-		ImgPath:  path,
-		IsEnable: true,
-	}
-	err := h.container.LibraryRepo.AddLibrary(library)
+
+	err := h.container.LibraryRepo.UpdateLibrary(req.Path, req.IsEnable)
 	if err != nil {
-		c.JSON(http.StatusOK, model.Response{
+		c.JSON(http.StatusInternalServerError, model.Response{
 			Code:    http.StatusInternalServerError,
 			Message: err.Error(),
 		})
@@ -107,26 +112,22 @@ func (h *Handler) UpdateLibrary(c *gin.Context) {
 
 	c.JSON(http.StatusOK, model.Response{
 		Code:    http.StatusOK,
-		Message: "Success",
-		Data:    nil,
+		Message: "Library updated successfully",
 	})
 }
+
 func (h *Handler) DeleteLibrary(c *gin.Context) {
-	var path string
-	if err := c.ShouldBindJSON(&path); err != nil {
+	path := c.Query("path")
+	if strings.TrimSpace(path) == "" {
 		c.JSON(http.StatusBadRequest, model.Response{
 			Code:    http.StatusBadRequest,
-			Message: "Invalid request body",
+			Message: "Missing path query parameter",
 		})
 		return
 	}
-	library := &model.LibraryTable{
-		ImgPath:  path,
-		IsEnable: true,
-	}
-	err := h.container.LibraryRepo.AddLibrary(library)
-	if err != nil {
-		c.JSON(http.StatusOK, model.Response{
+
+	if err := h.container.LibraryRepo.DeleteLibrary(path); err != nil {
+		c.JSON(http.StatusInternalServerError, model.Response{
 			Code:    http.StatusInternalServerError,
 			Message: err.Error(),
 		})
@@ -135,7 +136,6 @@ func (h *Handler) DeleteLibrary(c *gin.Context) {
 
 	c.JSON(http.StatusOK, model.Response{
 		Code:    http.StatusOK,
-		Message: "Success",
-		Data:    nil,
+		Message: "Library deleted successfully",
 	})
 }

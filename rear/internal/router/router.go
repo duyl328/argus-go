@@ -1,9 +1,10 @@
 package router
 
 import (
-	"github.com/gin-gonic/gin"
 	"rear/internal/container"
 	"rear/internal/handler"
+
+	"github.com/gin-gonic/gin"
 )
 
 // SetupRoutes 设置路由
@@ -35,8 +36,8 @@ func SetupRoutes(r *gin.Engine, contain *container.Container) {
 		{
 			library.GET("", libraryHandler.GetLibrary)
 			library.POST("", libraryHandler.AddLibrary)
-			library.PUT("/:path", libraryHandler.UpdateLibrary)
-			library.DELETE("/:path", libraryHandler.DeleteLibrary)
+			library.PUT("", libraryHandler.UpdateLibrary)
+			library.DELETE("", libraryHandler.DeleteLibrary)
 		}
 	}
 }
