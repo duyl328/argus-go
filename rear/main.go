@@ -3,9 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/pprof"
-	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"os"
@@ -19,6 +16,10 @@ import (
 	"rear/pkg/logger"
 	"syscall"
 	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/pprof"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -43,6 +44,9 @@ func main() {
 
 	// 初始化基础服务（启动写操作处理协程）
 	repositories.InitBaseService()
+
+	// 初始化外部（CLI）工具管理
+	// utils.EnsureInitialized()
 
 	//if err := initDatabase(); err != nil {
 	//	logger.Fatalf("Failed to initialize database: %v", err)

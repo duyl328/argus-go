@@ -17,7 +17,7 @@ func SetupRoutes(r *gin.Engine, contain *container.Container) {
 
 	// 资料库处理
 	libraryHandler := handler.NewLibraryHandler(contain)
-
+	devImageHandler := handler.NewDevImageHandler(contain)
 	// API版本组
 	v1 := r.Group("/api/v1")
 	{
@@ -39,5 +39,11 @@ func SetupRoutes(r *gin.Engine, contain *container.Container) {
 			library.PUT("", libraryHandler.UpdateLibrary)
 			library.DELETE("", libraryHandler.DeleteLibrary)
 		}
+	}
+	// 开发组
+	dev := r.Group("/dev")
+	{
+		// 处理图片格式
+		dev.GET("/tool/exiftool/get_exif", devImageHandler.GetExif)
 	}
 }

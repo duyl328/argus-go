@@ -11,16 +11,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type Handler struct {
+type LibraryHandler struct {
 	container *container.Container
 }
 
-func NewLibraryHandler(container *container.Container) *Handler {
-	return &Handler{container: container}
+func NewLibraryHandler(container *container.Container) *LibraryHandler {
+	return &LibraryHandler{container: container}
 }
 
 // GetLibrary 获取存储
-func (h *Handler) GetLibrary(c *gin.Context) {
+func (h *LibraryHandler) GetLibrary(c *gin.Context) {
 	libraries, err := h.container.LibraryRepo.GetAllLibrary()
 	if err != nil {
 		log.Printf("Failed to get all libraries: %v", err)
@@ -39,7 +39,7 @@ func (h *Handler) GetLibrary(c *gin.Context) {
 		Data:    libraries,
 	})
 }
-func (h *Handler) AddLibrary(c *gin.Context) {
+func (h *LibraryHandler) AddLibrary(c *gin.Context) {
 	type AddLibraryRequest struct {
 		Path string `json:"path"`
 	}
@@ -85,7 +85,7 @@ func (h *Handler) AddLibrary(c *gin.Context) {
 	})
 }
 
-func (h *Handler) UpdateLibrary(c *gin.Context) {
+func (h *LibraryHandler) UpdateLibrary(c *gin.Context) {
 	type UpdateLibraryRequest struct {
 		Path     string `json:"path"`
 		IsEnable bool   `json:"is_enable"`
@@ -116,7 +116,7 @@ func (h *Handler) UpdateLibrary(c *gin.Context) {
 	})
 }
 
-func (h *Handler) DeleteLibrary(c *gin.Context) {
+func (h *LibraryHandler) DeleteLibrary(c *gin.Context) {
 	path := c.Query("path")
 	if strings.TrimSpace(path) == "" {
 		c.JSON(http.StatusBadRequest, model.Response{
