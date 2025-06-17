@@ -1,8 +1,6 @@
 package utils
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestSysUtils(t *testing.T) {
 	sys_u := NewSysUtils()
