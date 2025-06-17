@@ -1,0 +1,497 @@
+package utils
+
+import (
+	"bufio"
+	"crypto/md5"
+	"crypto/sha256"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// FileInfo 文件信息结构体
+type FileInfo struct {
+	Name    string    `json:"name"`
+	Path    string    `json:"path"`
+	Size    int64     `json:"size"`
+	ModTime time.Time `json:"mod_time"`
+	IsDir   bool      `json:"is_dir"`
+	Ext     string    `json:"ext"`
+}
+
+// 1. 检查文件或目录是否存在
+func Exists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
+}
+
+// 2. 检查是否为目录
+func IsDir(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
+}
+
+// 3. 检查是否为文件
+func IsFile(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
+}
+
+// 4. 获取指定目录下的所有文件夹
+func GetDirectories(dirPath string) ([]string, error) {
+	var dirs []string
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("读取目录失败: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			dirs = append(dirs, entry.Name())
+		}
+	}
+
+	return dirs, nil
+}
+
+// 5. 获取指定目录下指定格式的文件
+func GetFilesByExtension(dirPath string, extensions ...string) ([]string, error) {
+	var files []string
+
+	// 标准化扩展名（确保以.开头）
+	for i, ext := range extensions {
+		if !strings.HasPrefix(ext, ".") {
+			extensions[i] = "." + ext
+		}
+		extensions[i] = strings.ToLower(extensions[i])
+	}
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("读取目录失败: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			fileExt := strings.ToLower(filepath.Ext(entry.Name()))
+			for _, ext := range extensions {
+				if fileExt == ext {
+					files = append(files, entry.Name())
+					break
+				}
+			}
+		}
+	}
+
+	return files, nil
+}
+
+// 6. 找到指定目录下第一个符合格式的文件
+func GetFirstFileByExtension(dirPath string, extensions ...string) (string, error) {
+	files, err := GetFilesByExtension(dirPath, extensions...)
+	if err != nil {
+		return "", err
+	}
+
+	if len(files) == 0 {
+		return "", fmt.Errorf("未找到符合扩展名的文件")
+	}
+
+	return files[0], nil
+}
+
+// 7. 递归获取目录下所有文件
+func GetAllFiles(dirPath string, recursive bool) ([]FileInfo, error) {
+	var files []FileInfo
+
+	if recursive {
+		err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() {
+				files = append(files, FileInfo{
+					Name:    info.Name(),
+					Path:    path,
+					Size:    info.Size(),
+					ModTime: info.ModTime(),
+					IsDir:   false,
+					Ext:     filepath.Ext(info.Name()),
+				})
+			}
+			return nil
+		})
+		return files, err
+	} else {
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			return nil, fmt.Errorf("读取目录失败: %w", err)
+		}
+
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				info, err := entry.Info()
+				if err != nil {
+					continue
+				}
+
+				files = append(files, FileInfo{
+					Name:    info.Name(),
+					Path:    filepath.Join(dirPath, info.Name()),
+					Size:    info.Size(),
+					ModTime: info.ModTime(),
+					IsDir:   false,
+					Ext:     filepath.Ext(info.Name()),
+				})
+			}
+		}
+		return files, nil
+	}
+}
+
+// 递归获取目录下所有文件夹
+func GetAllDirs(dirPath string, recursive bool) ([]FileInfo, error) {
+	var dirs []FileInfo
+
+	if recursive {
+		err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			// 只收集目录，排除根目录本身
+			if info.IsDir() && path != dirPath {
+				dirs = append(dirs, FileInfo{
+					Name:    info.Name(),
+					Path:    path,
+					Size:    0, // 目录大小通常为0或不适用
+					ModTime: info.ModTime(),
+					IsDir:   true,
+					Ext:     "", // 目录没有扩展名
+				})
+			}
+			return nil
+		})
+		return dirs, err
+	} else {
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			return nil, fmt.Errorf("读取目录失败: %w", err)
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				info, err := entry.Info()
+				if err != nil {
+					continue
+				}
+
+				dirs = append(dirs, FileInfo{
+					Name:    info.Name(),
+					Path:    filepath.Join(dirPath, info.Name()),
+					Size:    0, // 目录大小通常为0或不适用
+					ModTime: info.ModTime(),
+					IsDir:   true,
+					Ext:     "", // 目录没有扩展名
+				})
+			}
+		}
+		return dirs, nil
+	}
+}
+
+// 8. 删除文件或目录
+func Delete(path string) error {
+	if !Exists(path) {
+		return fmt.Errorf("路径不存在: %s", path)
+	}
+
+	return os.RemoveAll(path)
+}
+
+// 9. 创建目录（递归创建）
+func CreateDir(dirPath string) error {
+	return os.MkdirAll(dirPath, 0755)
+}
+
+// 10. 复制文件
+func CopyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("打开源文件失败: %w", err)
+	}
+	defer sourceFile.Close()
+
+	// 确保目标目录存在
+	dstDir := filepath.Dir(dst)
+	if err := CreateDir(dstDir); err != nil {
+		return fmt.Errorf("创建目标目录失败: %w", err)
+	}
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("创建目标文件失败: %w", err)
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	if err != nil {
+		return fmt.Errorf("复制文件失败: %w", err)
+	}
+
+	return nil
+}
+
+// 11. 移动/重命名文件
+func MoveFile(src, dst string) error {
+	// 确保目标目录存在
+	dstDir := filepath.Dir(dst)
+	if err := CreateDir(dstDir); err != nil {
+		return fmt.Errorf("创建目标目录失败: %w", err)
+	}
+
+	return os.Rename(src, dst)
+}
+
+// 12. 读取文件全部内容
+func ReadFile(filePath string) (string, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("读取文件失败: %w", err)
+	}
+	return string(content), nil
+}
+
+// 13. 按行读取文件
+func ReadFileLines(filePath string) ([]string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("打开文件失败: %w", err)
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("读取文件失败: %w", err)
+	}
+
+	return lines, nil
+}
+
+// 14. 写入文件内容
+func WriteFile(filePath, content string) error {
+	// 确保目录存在
+	dir := filepath.Dir(filePath)
+	if err := CreateDir(dir); err != nil {
+		return fmt.Errorf("创建目录失败: %w", err)
+	}
+
+	return os.WriteFile(filePath, []byte(content), 0644)
+}
+
+// 15. 追加写入文件
+func AppendFile(filePath, content string) error {
+	// 确保目录存在
+	dir := filepath.Dir(filePath)
+	if err := CreateDir(dir); err != nil {
+		return fmt.Errorf("创建目录失败: %w", err)
+	}
+
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("打开文件失败: %w", err)
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(content)
+	return err
+}
+
+// 16. 获取文件大小
+func GetFileSize(filePath string) (int64, error) {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return 0, fmt.Errorf("获取文件信息失败: %w", err)
+	}
+	return info.Size(), nil
+}
+
+// 17. 获取文件修改时间
+func GetModTime(filePath string) (time.Time, error) {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("获取文件信息失败: %w", err)
+	}
+	return info.ModTime(), nil
+}
+
+// 18. 获取文件扩展名
+func GetExtension(filePath string) string {
+	return filepath.Ext(filePath)
+}
+
+// 19. 获取文件名（不含扩展名）
+func GetFileName(filePath string) string {
+	base := filepath.Base(filePath)
+	ext := filepath.Ext(base)
+	return strings.TrimSuffix(base, ext)
+}
+
+// 20. 获取文件基本名称（含扩展名）
+func GetBaseName(filePath string) string {
+	return filepath.Base(filePath)
+}
+
+// 21. 获取文件目录
+func GetDir(filePath string) string {
+	return filepath.Dir(filePath)
+}
+
+// 22. 计算文件MD5哈希值
+func GetFileMD5(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("打开文件失败: %w", err)
+	}
+	defer file.Close()
+
+	hash := md5.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", fmt.Errorf("计算哈希失败: %w", err)
+	}
+
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+}
+
+// 23. 计算文件SHA256哈希值
+func GetFileSHA256(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("打开文件失败: %w", err)
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", fmt.Errorf("计算哈希失败: %w", err)
+	}
+
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+}
+
+// 24. 清空目录内容（保留目录本身）
+func CleanDir(dirPath string) error {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return fmt.Errorf("读取目录失败: %w", err)
+	}
+
+	for _, entry := range entries {
+		path := filepath.Join(dirPath, entry.Name())
+		if err := os.RemoveAll(path); err != nil {
+			return fmt.Errorf("删除 %s 失败: %w", path, err)
+		}
+	}
+
+	return nil
+}
+
+// 25. 获取目录大小
+func GetDirSize(dirPath string) (int64, error) {
+	var size int64
+
+	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	})
+
+	return size, err
+}
+
+// 26. 格式化文件大小
+func FormatFileSize(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// 27. 搜索文件（按文件名模式）
+func SearchFiles(dirPath, pattern string, recursive bool) ([]string, error) {
+	var matches []string
+
+	if recursive {
+		err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() {
+				matched, err := filepath.Match(pattern, info.Name())
+				if err != nil {
+					return err
+				}
+				if matched {
+					matches = append(matches, path)
+				}
+			}
+			return nil
+		})
+		return matches, err
+	} else {
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			return nil, fmt.Errorf("读取目录失败: %w", err)
+		}
+
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				matched, err := filepath.Match(pattern, entry.Name())
+				if err != nil {
+					return nil, err
+				}
+				if matched {
+					matches = append(matches, filepath.Join(dirPath, entry.Name()))
+				}
+			}
+		}
+		return matches, nil
+	}
+}
+
+// 28. 获取当前工作目录
+func GetCurrentDir() (string, error) {
+	return os.Getwd()
+}
+
+// 29. 改变工作目录
+func ChangeDir(dirPath string) error {
+	return os.Chdir(dirPath)
+}
