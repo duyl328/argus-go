@@ -233,6 +233,12 @@ func CopyFile(src, dst string) error {
 	}
 	defer sourceFile.Close()
 
+	// 获取源文件信息
+	srcInfo, err := sourceFile.Stat()
+	if err != nil {
+		return err
+	}
+
 	// 确保目标目录存在
 	dstDir := filepath.Dir(dst)
 	if err := CreateDir(dstDir); err != nil {
@@ -250,7 +256,148 @@ func CopyFile(src, dst string) error {
 		return fmt.Errorf("复制文件失败: %w", err)
 	}
 
+	// 设置文件权限
+	return os.Chmod(dst, srcInfo.Mode())
+}
+
+// CopyDir 递归复制整个目录
+func CopyDir(src, dst string) error {
+	// 获取源目录信息
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("获取源目录信息失败: %w", err)
+	}
+
+	// 确保源路径是一个目录
+	if !srcInfo.IsDir() {
+		return fmt.Errorf("源路径不是目录: %s", src)
+	}
+
+	// 创建目标目录
+	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
+		return fmt.Errorf("创建目标目录失败: %w", err)
+	}
+
+	// 读取源目录内容
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return fmt.Errorf("读取源目录失败: %w", err)
+	}
+
+	// 遍历源目录中的每个条目
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			// 如果是目录，递归复制
+			if err := CopyDir(srcPath, dstPath); err != nil {
+				return fmt.Errorf("复制子目录 %s 失败: %w", entry.Name(), err)
+			}
+		} else {
+			// 如果是文件，使用你的 CopyFile 函数
+			if err := CopyFile(srcPath, dstPath); err != nil {
+				return fmt.Errorf("复制文件 %s 失败: %w", entry.Name(), err)
+			}
+		}
+	}
+
 	return nil
+}
+
+// CopyDirWithOptions 带选项的目录复制函数
+type CopyOptions struct {
+	Overwrite    bool // 是否覆盖已存在的文件
+	SkipSymlinks bool // 是否跳过符号链接
+}
+
+func CopyDirWithOptions(src, dst string, opts *CopyOptions) error {
+	if opts == nil {
+		opts = &CopyOptions{Overwrite: true, SkipSymlinks: false}
+	}
+
+	// 获取源目录信息
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("获取源目录信息失败: %w", err)
+	}
+
+	if !srcInfo.IsDir() {
+		return fmt.Errorf("源路径不是目录: %s", src)
+	}
+
+	// 检查目标目录是否已存在
+	if dstInfo, err := os.Stat(dst); err == nil {
+		if !dstInfo.IsDir() {
+			return fmt.Errorf("目标路径已存在但不是目录: %s", dst)
+		}
+		if !opts.Overwrite {
+			return fmt.Errorf("目标目录已存在: %s", dst)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("检查目标目录失败: %w", err)
+	}
+
+	// 创建目标目录
+	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
+		return fmt.Errorf("创建目标目录失败: %w", err)
+	}
+
+	// 读取源目录内容
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return fmt.Errorf("读取源目录失败: %w", err)
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		// 处理符号链接
+		if entry.Type()&os.ModeSymlink != 0 {
+			if opts.SkipSymlinks {
+				continue
+			}
+			if err := copySymlink(srcPath, dstPath); err != nil {
+				return fmt.Errorf("复制符号链接 %s 失败: %w", entry.Name(), err)
+			}
+			continue
+		}
+
+		if entry.IsDir() {
+			// 递归复制子目录
+			if err := CopyDirWithOptions(srcPath, dstPath, opts); err != nil {
+				return fmt.Errorf("复制子目录 %s 失败: %w", entry.Name(), err)
+			}
+		} else {
+			// 检查文件是否已存在
+			if !opts.Overwrite {
+				if _, err := os.Stat(dstPath); err == nil {
+					return fmt.Errorf("目标文件已存在: %s", dstPath)
+				}
+			}
+
+			// 复制文件
+			if err := CopyFile(srcPath, dstPath); err != nil {
+				return fmt.Errorf("复制文件 %s 失败: %w", entry.Name(), err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// copySymlink 复制符号链接
+func copySymlink(src, dst string) error {
+	link, err := os.Readlink(src)
+	if err != nil {
+		return err
+	}
+
+	// 删除可能已存在的目标文件/链接
+	os.Remove(dst)
+
+	return os.Symlink(link, dst)
 }
 
 // 11. 移动/重命名文件
