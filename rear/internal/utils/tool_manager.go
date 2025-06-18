@@ -3,10 +3,12 @@ package utils
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"rear/pkg/logger"
 	"runtime"
 	"sync"
 	"time"
@@ -76,8 +78,9 @@ func detectTools() error {
 // findTool 查找工具
 func findTool(name string, execDir string) string {
 	// Windows 下添加 .exe 后缀
+	exeName := name
 	if runtime.GOOS == "windows" {
-		name = name + ".exe"
+		exeName = name + ".exe"
 	}
 
 	// 查找顺序：
@@ -87,10 +90,14 @@ func findTool(name string, execDir string) string {
 	// 4. 系统 PATH
 
 	searchPaths := []string{
-		filepath.Join(execDir, name),
-		filepath.Join(execDir, "bin", name),
-		filepath.Join(execDir, "tools", name),
+		filepath.Join(execDir, exeName),
+		filepath.Join(execDir, "bin", exeName),
+		filepath.Join(execDir, "tools", exeName),
+		filepath.Join(execDir, "tools", name, exeName),
 	}
+	jsonBytes, _ := json.Marshal(searchPaths)
+	msg := string(jsonBytes)
+	logger.Warn(msg)
 
 	for _, path := range searchPaths {
 		if _, err := os.Stat(path); err == nil {
@@ -99,7 +106,7 @@ func findTool(name string, execDir string) string {
 	}
 
 	// 尝试从 PATH 中查找
-	if path, err := exec.LookPath(name); err == nil {
+	if path, err := exec.LookPath(exeName); err == nil {
 		return path
 	}
 

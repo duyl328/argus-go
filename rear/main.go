@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"embed"
 	"errors"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"rear/internal/config"
 	"rear/internal/container"
 	"rear/internal/db"
@@ -21,6 +25,9 @@ import (
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 )
+
+//go:embed tools/windows_amd64/exiftool/*
+var exiftoolFS embed.FS
 
 func main() {
 	// 日志初始化
@@ -44,6 +51,21 @@ func main() {
 
 	// 初始化基础服务（启动写操作处理协程）
 	repositories.InitBaseService()
+
+	// 创建运行目录
+	execPath, err := os.Executable()
+	execDir := filepath.Dir(execPath)
+
+	// 将 CLI 放到到运行目录
+	join := filepath.Join(execDir, "tools", "exiftool")
+	srcDir := `.\tools\windows_amd64\exiftool\exiftool` // 源目录
+	//destDir := `.\build\tools\exiftool`                 // 目标目录
+
+	// 复制整个目录
+	if err := copyDirectory(srcDir, join); err != nil {
+		fmt.Printf("复制失败: %v\n", err)
+		return
+	}
 
 	// 初始化外部（CLI）工具管理
 	// utils.EnsureInitialized()
@@ -122,4 +144,79 @@ func startHttp(con *container.Container) {
 	}
 
 	logger.Info("Server exited")
+}
+
+func copyDirectory(src, dest string) error {
+
+	// 获取源目录信息
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("源目录不存在: %s, 错误: %v", src, err)
+	}
+
+	// 创建目标目录
+	if err := os.MkdirAll(dest, srcInfo.Mode()); err != nil {
+		return fmt.Errorf("创建目标目录失败: %v", err)
+	}
+
+	// 读取源目录内容
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return fmt.Errorf("读取源目录失败: %v", err)
+	}
+
+	// 遍历并复制每个文件/目录
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		destPath := filepath.Join(dest, entry.Name())
+
+		if entry.IsDir() {
+			// 递归复制子目录
+			if err := copyDirectory(srcPath, destPath); err != nil {
+				return err
+			}
+		} else {
+			// 复制文件
+			if err := copyFile(srcPath, destPath); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func copyFile(src, dest string) error {
+	// 打开源文件
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	// 获取源文件信息
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	// 确保目标目录存在
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return err
+	}
+
+	// 创建目标文件
+	destFile, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	// 复制文件内容
+	if _, err := io.Copy(destFile, srcFile); err != nil {
+		return err
+	}
+
+	// 设置文件权限
+	return os.Chmod(dest, srcInfo.Mode())
 }
