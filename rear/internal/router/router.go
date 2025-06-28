@@ -8,7 +8,7 @@ import (
 )
 
 // SetupRoutes 设置路由
-func SetupRoutes(r *gin.Engine, contain *container.Container) {
+func SetupRoutes(r *gin.Engine, contain *container.Container, imgContain *container.TaskContainer) {
 	// 默认访问
 	r.GET("/", handler.BasicResponse)
 
@@ -16,7 +16,7 @@ func SetupRoutes(r *gin.Engine, contain *container.Container) {
 	r.GET("/health", handler.HealthCheck)
 
 	// 资料库处理
-	libraryHandler := handler.NewLibraryHandler(contain)
+	libraryHandler := handler.NewLibraryHandler(contain, imgContain)
 	devImageHandler := handler.NewDevImageHandler(contain)
 	// API版本组
 	v1 := r.Group("/api/v1")
@@ -38,6 +38,8 @@ func SetupRoutes(r *gin.Engine, contain *container.Container) {
 			library.POST("", libraryHandler.AddLibrary)
 			library.PUT("", libraryHandler.UpdateLibrary)
 			library.DELETE("", libraryHandler.DeleteLibrary)
+			// 执行检索任务
+			library.POST("indexed", libraryHandler.LibraryIndex)
 		}
 	}
 	// 开发组

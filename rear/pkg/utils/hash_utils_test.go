@@ -53,7 +53,7 @@ func TestMain(m *testing.M) {
 	fmt.Println("Testing SHA-256...")
 	for i := 0; i < 5; i++ {
 		start256 := time.Now()
-		sha256Time, err := SHA256File(fileName)
+		sha256Time, err := HashUtils.SHA256File(fileName)
 		elapsed256 := time.Since(start256)
 
 		if err != nil {
@@ -66,7 +66,7 @@ func TestMain(m *testing.M) {
 	fmt.Println("Testing SHA-512...")
 	for i := 0; i < 5; i++ {
 		start512 := time.Now()
-		sha512Time, err := SHA512File(fileName)
+		sha512Time, err := HashUtils.SHA512File(fileName)
 		elapsed512 := time.Since(start512)
 		if err != nil {
 			fmt.Println("SHA-512 error:", err)

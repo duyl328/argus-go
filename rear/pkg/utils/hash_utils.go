@@ -14,6 +14,10 @@ import (
 	"sync"
 )
 
+type hashUtilsStruct struct{}
+
+var HashUtils = hashUtilsStruct{}
+
 // HashType 定义支持的Hash算法类型
 type HashType int
 
@@ -40,7 +44,7 @@ type HashResult struct {
 }
 
 // getHasher 根据类型返回对应的Hash实例
-func getHasher(hashType HashType) hash.Hash {
+func (h hashUtilsStruct) getHasher(hashType HashType) hash.Hash {
 	switch hashType {
 	case MD5:
 		return md5.New()
@@ -56,7 +60,7 @@ func getHasher(hashType HashType) hash.Hash {
 }
 
 // getHasherName 获取Hash算法名称
-func getHasherName(hashType HashType) string {
+func (h hashUtilsStruct) getHasherName(hashType HashType) string {
 	switch hashType {
 	case MD5:
 		return "MD5"
@@ -72,21 +76,21 @@ func getHasherName(hashType HashType) string {
 }
 
 // HashString 计算字符串的Hash值
-func HashString(data string, hashType HashType) string {
-	hasher := getHasher(hashType)
+func (h hashUtilsStruct) HashString(data string, hashType HashType) string {
+	hasher := h.getHasher(hashType)
 	hasher.Write([]byte(data))
 	return fmt.Sprintf("%x", hasher.Sum(nil))
 }
 
 // HashBytes 计算字节数组的Hash值
-func HashBytes(data []byte, hashType HashType) string {
-	hasher := getHasher(hashType)
+func (h hashUtilsStruct) HashBytes(data []byte, hashType HashType) string {
+	hasher := h.getHasher(hashType)
 	hasher.Write(data)
 	return fmt.Sprintf("%x", hasher.Sum(nil))
 }
 
 // HashFile 计算单个文件的Hash值（自动选择优化策略）
-func HashFile(filename string, hashType HashType) (string, error) {
+func (h hashUtilsStruct) HashFile(filename string, hashType HashType) (string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return "", err
@@ -99,20 +103,20 @@ func HashFile(filename string, hashType HashType) (string, error) {
 		return "", err
 	}
 
-	hasher := getHasher(hashType)
+	hasher := h.getHasher(hashType)
 
 	// 根据文件大小选择不同的处理策略
 	if fileInfo.Size() <= SmallFileThreshold {
 		// 小文件：直接读取
-		return hashSmallFile(file, hasher)
+		return h.hashSmallFile(file, hasher)
 	} else {
 		// 大文件：使用缓冲区
-		return hashLargeFile(file, hasher, fileInfo.Size())
+		return h.hashLargeFile(file, hasher, fileInfo.Size())
 	}
 }
 
 // hashSmallFile 处理小文件
-func hashSmallFile(file *os.File, hasher hash.Hash) (string, error) {
+func (h hashUtilsStruct) hashSmallFile(file *os.File, hasher hash.Hash) (string, error) {
 	_, err := io.Copy(hasher, file)
 	if err != nil {
 		return "", err
@@ -121,7 +125,7 @@ func hashSmallFile(file *os.File, hasher hash.Hash) (string, error) {
 }
 
 // hashLargeFile 处理大文件
-func hashLargeFile(file *os.File, hasher hash.Hash, fileSize int64) (string, error) {
+func (h hashUtilsStruct) hashLargeFile(file *os.File, hasher hash.Hash, fileSize int64) (string, error) {
 	// 根据文件大小动态调整缓冲区
 	bufferSize := DefaultBufferSize
 	if fileSize > 100*1024*1024 { // 大于100MB使用更大缓冲区
@@ -147,7 +151,7 @@ func hashLargeFile(file *os.File, hasher hash.Hash, fileSize int64) (string, err
 }
 
 // HashFileWithProgress 计算文件Hash值并提供进度回调
-func HashFileWithProgress(filename string, hashType HashType, progressCallback func(processed, total int64)) (string, error) {
+func (h hashUtilsStruct) HashFileWithProgress(filename string, hashType HashType, progressCallback func(processed, total int64)) (string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return "", err
@@ -159,7 +163,7 @@ func HashFileWithProgress(filename string, hashType HashType, progressCallback f
 		return "", err
 	}
 
-	hasher := getHasher(hashType)
+	hasher := h.getHasher(hashType)
 	buffer := make([]byte, DefaultBufferSize)
 	var processed int64
 
@@ -184,7 +188,7 @@ func HashFileWithProgress(filename string, hashType HashType, progressCallback f
 }
 
 // HashMultipleFiles 并发计算多个文件的Hash值
-func HashMultipleFiles(filenames []string, hashType HashType) []HashResult {
+func (h hashUtilsStruct) HashMultipleFiles(filenames []string, hashType HashType) []HashResult {
 	// 使用CPU核心数作为并发数
 	numWorkers := runtime.NumCPU()
 	jobs := make(chan string, len(filenames))
@@ -197,7 +201,7 @@ func HashMultipleFiles(filenames []string, hashType HashType) []HashResult {
 		go func() {
 			defer wg.Done()
 			for filename := range jobs {
-				hash, err := HashFile(filename, hashType)
+				hash, err := h.HashFile(filename, hashType)
 
 				var size int64
 				if err == nil {
@@ -240,13 +244,13 @@ func HashMultipleFiles(filenames []string, hashType HashType) []HashResult {
 }
 
 // CompareFiles 比较两个文件是否相同（通过Hash值）
-func CompareFiles(file1, file2 string, hashType HashType) (bool, error) {
-	hash1, err := HashFile(file1, hashType)
+func (h hashUtilsStruct) CompareFiles(file1, file2 string, hashType HashType) (bool, error) {
+	hash1, err := h.HashFile(file1, hashType)
 	if err != nil {
 		return false, err
 	}
 
-	hash2, err := HashFile(file2, hashType)
+	hash2, err := h.HashFile(file2, hashType)
 	if err != nil {
 		return false, err
 	}
@@ -255,8 +259,8 @@ func CompareFiles(file1, file2 string, hashType HashType) (bool, error) {
 }
 
 // FindDuplicates 在文件列表中查找重复文件
-func FindDuplicates(filenames []string, hashType HashType) map[string][]string {
-	results := HashMultipleFiles(filenames, hashType)
+func (h hashUtilsStruct) FindDuplicates(filenames []string, hashType HashType) map[string][]string {
+	results := h.HashMultipleFiles(filenames, hashType)
 	duplicates := make(map[string][]string)
 
 	for _, result := range results {
@@ -276,8 +280,8 @@ func FindDuplicates(filenames []string, hashType HashType) map[string][]string {
 }
 
 // VerifyFileIntegrity 验证文件完整性
-func VerifyFileIntegrity(filename, expectedHash string, hashType HashType) (bool, error) {
-	actualHash, err := HashFile(filename, hashType)
+func (h hashUtilsStruct) VerifyFileIntegrity(filename, expectedHash string, hashType HashType) (bool, error) {
+	actualHash, err := h.HashFile(filename, hashType)
 	if err != nil {
 		return false, err
 	}
@@ -287,7 +291,7 @@ func VerifyFileIntegrity(filename, expectedHash string, hashType HashType) (bool
 }
 
 // HashFileMultipleAlgorithms 使用多种算法计算文件Hash
-func HashFileMultipleAlgorithms(filename string, hashTypes []HashType) (map[string]string, error) {
+func (h hashUtilsStruct) HashFileMultipleAlgorithms(filename string, hashTypes []HashType) (map[string]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
@@ -297,7 +301,7 @@ func HashFileMultipleAlgorithms(filename string, hashTypes []HashType) (map[stri
 	// 创建多个hasher
 	hashers := make(map[HashType]hash.Hash)
 	for _, hashType := range hashTypes {
-		hashers[hashType] = getHasher(hashType)
+		hashers[hashType] = h.getHasher(hashType)
 	}
 
 	// 创建MultiWriter
@@ -316,7 +320,7 @@ func HashFileMultipleAlgorithms(filename string, hashTypes []HashType) (map[stri
 	// 收集结果
 	results := make(map[string]string)
 	for hashType, hasher := range hashers {
-		hashName := getHasherName(hashType)
+		hashName := h.getHasherName(hashType)
 		results[hashName] = fmt.Sprintf("%x", hasher.Sum(nil))
 	}
 
@@ -324,26 +328,26 @@ func HashFileMultipleAlgorithms(filename string, hashTypes []HashType) (map[stri
 }
 
 // 便捷函数
-func MD5File(filename string) (string, error) {
-	return HashFile(filename, MD5)
+func (h hashUtilsStruct) MD5File(filename string) (string, error) {
+	return h.HashFile(filename, MD5)
 }
 
-func SHA1File(filename string) (string, error) {
-	return HashFile(filename, SHA1)
+func (h hashUtilsStruct) SHA1File(filename string) (string, error) {
+	return h.HashFile(filename, SHA1)
 }
 
-func SHA256File(filename string) (string, error) {
-	return HashFile(filename, SHA256)
+func (h hashUtilsStruct) SHA256File(filename string) (string, error) {
+	return h.HashFile(filename, SHA256)
 }
 
-func SHA512File(filename string) (string, error) {
-	return HashFile(filename, SHA512)
+func (h hashUtilsStruct) SHA512File(filename string) (string, error) {
+	return h.HashFile(filename, SHA512)
 }
 
-func MD5String(data string) string {
-	return HashString(data, MD5)
+func (h hashUtilsStruct) MD5String(data string) string {
+	return h.HashString(data, MD5)
 }
 
-func SHA256String(data string) string {
-	return HashString(data, SHA256)
+func (h hashUtilsStruct) SHA256String(data string) string {
+	return h.HashString(data, SHA256)
 }

@@ -52,6 +52,9 @@ func main() {
 	// 初始化基础服务（启动写操作处理协程）
 	repositories.InitBaseService()
 
+	// 初始化照片管理任务
+	newTaskContainer := container.NewTaskContainer()
+
 	// 创建运行目录
 	execPath, err := os.Executable()
 	execDir := filepath.Dir(execPath)
@@ -61,7 +64,7 @@ func main() {
 	srcDir := `.\tools\windows_amd64\exiftool\exiftool` // 源目录
 
 	// 复制整个目录
-	if err := utils.CopyDir(srcDir, join); err != nil {
+	if err := utils.FileUtils.CopyDir(srcDir, join); err != nil {
 		fmt.Printf("复制失败: %v\n", err)
 		return
 	}
@@ -72,10 +75,10 @@ func main() {
 	// 依赖注入
 
 	// 启动 http
-	startHttp(newContainer)
+	startHttp(newContainer, newTaskContainer)
 }
 
-func startHttp(con *container.Container) {
+func startHttp(con *container.Container, imgContain *container.TaskContainer) {
 	// 配置加载
 	netConfig := config.InitConfig()
 	// 设置Gin模式
@@ -103,7 +106,7 @@ func startHttp(con *container.Container) {
 	}
 
 	// 设置路由
-	router.SetupRoutes(r, con)
+	router.SetupRoutes(r, con, imgContain)
 
 	// 创建HTTP服务器
 	srv := &http.Server{

@@ -84,7 +84,7 @@ func NewTaskScheduler(workers int, queueSize int) *TaskScheduler {
 		ts.workerPool <- struct{}{}
 	}
 
-	// 启动worker
+	// 启动 worker
 	ts.startWorkers()
 
 	// 启动结果处理器
