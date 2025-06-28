@@ -8,7 +8,7 @@ import (
 )
 
 // SetupRoutes 设置路由
-func SetupRoutes(r *gin.Engine, contain *container.Container, imgContain *container.TaskContainer) {
+func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *container.TaskContainer) {
 	// 默认访问
 	r.GET("/", handler.BasicResponse)
 

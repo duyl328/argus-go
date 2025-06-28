@@ -10,10 +10,10 @@ import (
 )
 
 type DevImageHandler struct {
-	container *container.Container
+	container *container.DbContainer
 }
 
-func NewDevImageHandler(container *container.Container) *DevImageHandler {
+func NewDevImageHandler(container *container.DbContainer) *DevImageHandler {
 	return &DevImageHandler{container: container}
 }
 

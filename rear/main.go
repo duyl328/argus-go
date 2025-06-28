@@ -53,7 +53,7 @@ func main() {
 	repositories.InitBaseService()
 
 	// 初始化照片管理任务
-	newTaskContainer := container.NewTaskContainer()
+	newTaskContainer := container.NewTaskContainer(newContainer)
 
 	// 创建运行目录
 	execPath, err := os.Executable()
@@ -78,7 +78,7 @@ func main() {
 	startHttp(newContainer, newTaskContainer)
 }
 
-func startHttp(con *container.Container, imgContain *container.TaskContainer) {
+func startHttp(con *container.DbContainer, imgContain *container.TaskContainer) {
 	// 配置加载
 	netConfig := config.InitConfig()
 	// 设置Gin模式

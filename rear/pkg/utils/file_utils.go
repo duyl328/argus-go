@@ -22,6 +22,12 @@ type FileInfo struct {
 	Ext     string    `json:"ext"`
 }
 
+// FilteredFiles 包含按类型分类的文件结果
+type FilteredFiles struct {
+	SupportedFiles []FileInfo // 支持的文件类型
+	OtherFiles     []FileInfo // 其他文件类型
+}
+
 // fileUtilsStruct 用于封装文件工具方法
 type fileUtilsStruct struct{}
 
@@ -166,6 +172,78 @@ func (fileUtilsStruct) GetAllFiles(dirPath string, recursive bool) ([]FileInfo, 
 	}
 }
 
+// GetFilteredFiles 根据指定的文件类型递归获取文件，并按类型分类
+func (fileUtilsStruct) GetFilteredFiles(dirPath string, recursive bool, supportedTypes []string) (*FilteredFiles, error) {
+	var result FilteredFiles
+
+	// 将支持的文件类型转换为map，便于快速查找（转为小写）
+	supportedMap := make(map[string]bool)
+	for _, ext := range supportedTypes {
+		supportedMap[strings.ToLower(ext)] = true
+	}
+
+	if recursive {
+		err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() {
+				fileInfo := FileInfo{
+					Name:    info.Name(),
+					Path:    path,
+					Size:    info.Size(),
+					ModTime: info.ModTime(),
+					IsDir:   false,
+					Ext:     filepath.Ext(info.Name()),
+				}
+
+				// 检查文件扩展名是否在支持列表中（不区分大小写）
+				ext := strings.ToLower(filepath.Ext(info.Name()))
+				if supportedMap[ext] {
+					result.SupportedFiles = append(result.SupportedFiles, fileInfo)
+				} else {
+					result.OtherFiles = append(result.OtherFiles, fileInfo)
+				}
+			}
+			return nil
+		})
+		return &result, err
+	} else {
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			return nil, fmt.Errorf("读取目录失败: %w", err)
+		}
+
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				info, err := entry.Info()
+				if err != nil {
+					continue
+				}
+
+				fileInfo := FileInfo{
+					Name:    info.Name(),
+					Path:    filepath.Join(dirPath, info.Name()),
+					Size:    info.Size(),
+					ModTime: info.ModTime(),
+					IsDir:   false,
+					Ext:     filepath.Ext(info.Name()),
+				}
+
+				// 检查文件扩展名是否在支持列表中（不区分大小写）
+				ext := strings.ToLower(filepath.Ext(info.Name()))
+				if supportedMap[ext] {
+					result.SupportedFiles = append(result.SupportedFiles, fileInfo)
+				} else {
+					result.OtherFiles = append(result.OtherFiles, fileInfo)
+				}
+			}
+		}
+		return &result, nil
+	}
+}
+
 // 递归获取目录下所有文件夹
 func (fileUtilsStruct) GetAllDirs(dirPath string, recursive bool) ([]FileInfo, error) {
 	var dirs []FileInfo
@@ -233,6 +311,12 @@ func (fileUtilsStruct) CreateDir(dirPath string) error {
 
 // 10. 复制文件
 func (f fileUtilsStruct) CopyFile(src, dst string) error {
+	// 检查目标文件是否存在
+	if _, err := os.Stat(dst); err == nil {
+		// 目标文件存在，跳过
+		return os.ErrExist
+	}
+
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("打开源文件失败: %w", err)
@@ -298,11 +382,19 @@ func (f fileUtilsStruct) CopyDir(src, dst string) error {
 		if entry.IsDir() {
 			// 如果是目录，递归复制
 			if err := f.CopyDir(srcPath, dstPath); err != nil {
-				return fmt.Errorf("复制子目录 %s 失败: %w", entry.Name(), err)
+				// 子目录失败也继续复制其他内容
+				fmt.Printf("[WARN] 复制子目录 %s 失败: %v\n", entry.Name(), err)
+				continue
 			}
 		} else {
-			// 如果是文件，使用你的 CopyFile 函数
-			if err := f.CopyFile(srcPath, dstPath); err != nil {
+			err := f.CopyFile(srcPath, dstPath)
+			if err != nil {
+				// 判断是否是文件已存在或拒绝访问
+				if os.IsPermission(err) || os.IsExist(err) {
+					fmt.Printf("[WARN] 复制文件 %s 被跳过: %v\n", dstPath, err)
+					continue
+				}
+				// 其他错误还是报错
 				return fmt.Errorf("复制文件 %s 失败: %w", entry.Name(), err)
 			}
 		}

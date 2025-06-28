@@ -2,10 +2,13 @@ package handler
 
 import (
 	"fmt"
+	"go.uber.org/zap"
 	"log"
 	"net/http"
+	"rear/internal/config"
 	"rear/internal/container"
 	"rear/internal/model"
+	"rear/pkg/logger"
 	"rear/pkg/utils"
 	"strings"
 
@@ -13,11 +16,11 @@ import (
 )
 
 type LibraryHandler struct {
-	container  *container.Container
+	container  *container.DbContainer
 	imgContain *container.TaskContainer
 }
 
-func NewLibraryHandler(container *container.Container, imgContain *container.TaskContainer) *LibraryHandler {
+func NewLibraryHandler(container *container.DbContainer, imgContain *container.TaskContainer) *LibraryHandler {
 	return &LibraryHandler{container: container, imgContain: imgContain}
 }
 
@@ -167,7 +170,6 @@ func (h *LibraryHandler) LibraryIndex(c *gin.Context) {
 	for i := range library {
 		path := library[i]
 		isDir := utils.FileUtils.IsDir(path.ImgPath)
-		log.Printf(path.ImgPath)
 		if isDir {
 			dirs = append(dirs, path.ImgPath)
 		}
@@ -182,15 +184,35 @@ func (h *LibraryHandler) LibraryIndex(c *gin.Context) {
 	}
 
 	// 获取可用路径下所有的照片【指定类型】
-	//utils.FileUtils.GetAllFiles()
+	logger.Info(fmt.Sprintf("检索的列表: %v", dirs))
+	var fileList []string // 创建一个空的 string 切片
+	for i := range dirs {
+		dir := dirs[i]
+
+		files, err := utils.FileUtils.GetFilteredFiles(dir, true, config.CONFIG.BaseSupportedFileTypes)
+		if err != nil {
+			logger.Error("文件获取失败！", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, model.Response{
+				Code:    http.StatusInternalServerError,
+				Message: fmt.Sprintf("指定路径 %v 文件获取失败!", dir),
+			})
+			return
+		}
+		for i2 := range files.SupportedFiles {
+			info := files.SupportedFiles[i2]
+			fileList = append(fileList, info.Path)
+		}
+	}
+	logger.Info(fmt.Sprintf("得到的照片: %v", fileList))
 
 	// 启动后台任务，开始处理
-	//h.imgContain.ImgTaskManager.AddTask()
+	for i := range fileList {
+		file := fileList[i]
+		h.imgContain.ImgTaskManager.AddTask(file)
+	}
 
 	c.JSON(http.StatusOK, model.Response{
 		Code:    http.StatusOK,
 		Message: "索引任务已启动",
 	})
 }
-
-//pushurl = https://github.com/duyl328/argus-go.git
