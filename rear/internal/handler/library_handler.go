@@ -172,6 +172,7 @@ func (h *LibraryHandler) LibraryIndex(c *gin.Context) {
 			dirs = append(dirs, path.ImgPath)
 		}
 	}
+	// 无用文件夹是否要进行提示【TODO】
 	if len(dirs) == 0 {
 		c.JSON(http.StatusInternalServerError, model.Response{
 			Code:    http.StatusOK,
