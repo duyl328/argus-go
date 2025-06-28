@@ -192,3 +192,5 @@ func (h *LibraryHandler) LibraryIndex(c *gin.Context) {
 		Message: "索引任务已启动",
 	})
 }
+
+//pushurl = https://github.com/duyl328/argus-go.git
