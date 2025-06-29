@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go.uber.org/zap"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 // 全局变量存储工具路径
 var (
 	ImageMagickPath string
+	VipsPath        string
 	ExifToolPath    string
 	toolsInitOnce   sync.Once
 	toolsInitErr    error
@@ -27,6 +29,7 @@ type Config struct {
 	// 工具路径（如果为空，会自动检测）
 	ImageMagickPath string
 	ExifToolPath    string
+	VipsPath        string
 }
 
 // Initialize 初始化工具路径（可选调用，如果不调用会在第一次使用时自动初始化）
@@ -38,6 +41,7 @@ func Initialize(config *Config) error {
 	toolsInitOnce.Do(func() {
 		ImageMagickPath = config.ImageMagickPath
 		ExifToolPath = config.ExifToolPath
+		VipsPath = config.VipsPath
 		toolsInitErr = detectTools()
 	})
 
@@ -72,6 +76,14 @@ func detectTools() error {
 		return fmt.Errorf("ExifTool not found")
 	}
 
+	// 检测 libvips
+	if VipsPath == "" {
+		VipsPath = findTool("vips", execDir)
+	}
+	if VipsPath == "" {
+		return fmt.Errorf("libvips not found")
+	}
+
 	return nil
 }
 
@@ -94,10 +106,11 @@ func findTool(name string, execDir string) string {
 		filepath.Join(execDir, "bin", exeName),
 		filepath.Join(execDir, "tools", exeName),
 		filepath.Join(execDir, "tools", name, exeName),
+		filepath.Join(execDir, "tools", name, "bin", exeName),
 	}
 	jsonBytes, _ := json.Marshal(searchPaths)
 	msg := string(jsonBytes)
-	logger.Warn(msg)
+	logger.Warn("查找工具路径", zap.String("paths", msg))
 
 	for _, path := range searchPaths {
 		if _, err := os.Stat(path); err == nil {
@@ -115,7 +128,7 @@ func findTool(name string, execDir string) string {
 
 // EnsureInitialized 确保工具已初始化
 func EnsureInitialized() error {
-	if toolsInitErr == nil && ImageMagickPath == "" && ExifToolPath == "" {
+	if toolsInitErr == nil && ImageMagickPath == "" && ExifToolPath == "" && VipsPath == "" {
 		return Initialize(nil)
 	}
 	return toolsInitErr

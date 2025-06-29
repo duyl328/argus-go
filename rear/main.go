@@ -5,6 +5,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"go.uber.org/zap"
 	"log"
 	"net/http"
 	"os"
@@ -30,6 +31,9 @@ import (
 var exiftoolFS embed.FS
 
 func main() {
+	// 基础配置加载
+	config.InitConfig()
+
 	// 日志初始化
 	err := logger.InitDefaultLogger()
 	if err != nil {
@@ -55,16 +59,22 @@ func main() {
 	// 初始化照片管理任务
 	newTaskContainer := container.NewTaskContainer(newContainer)
 
-	// 创建运行目录
-	execPath, err := os.Executable()
-	execDir := filepath.Dir(execPath)
+	// 创建软件所需的缓存目录等内容
+	createCachePath(config.CONFIG.AppDir)
 
 	// 将 CLI 放到到运行目录
-	join := filepath.Join(execDir, "tools", "exiftool")
+	join := filepath.Join(config.CONFIG.AppDir, "tools", "exiftool")
 	srcDir := `.\tools\windows_amd64\exiftool\exiftool` // 源目录
 
 	// 复制整个目录
 	if err := utils.FileUtils.CopyDir(srcDir, join); err != nil {
+		fmt.Printf("复制失败: %v\n", err)
+		return
+	}
+
+	join1 := filepath.Join(config.CONFIG.AppDir, "tools", "vips")
+	srcDir1 := `.\tools\windows_amd64\libvips\vips` // 源目录
+	if err := utils.FileUtils.CopyDir(srcDir1, join1); err != nil {
 		fmt.Printf("复制失败: %v\n", err)
 		return
 	}
@@ -78,11 +88,27 @@ func main() {
 	startHttp(newContainer, newTaskContainer)
 }
 
+// 创建软件所需的缓存目录等内容
+func createCachePath(dir string) {
+	// 缩略图目录
+	thumbnailPath := filepath.Join(dir, config.CONFIG.PathConfig.CachePath, config.CONFIG.PathConfig.ThumbnailPath)
+	err := utils.FileUtils.CreateDir(thumbnailPath)
+	if err != nil {
+		logger.Error("缩略图路径创建失败！", zap.String("path", dir), zap.Error(err))
+		return
+	}
+	// 临时文件路径
+	tempPath := filepath.Join(dir, config.CONFIG.PathConfig.TempPath, config.CONFIG.PathConfig.PngTempPath)
+	err = utils.FileUtils.CreateDir(tempPath)
+	if err != nil {
+		logger.Error("临时文件夹创建失败！", zap.String("path", dir), zap.Error(err))
+		return
+	}
+}
+
 func startHttp(con *container.DbContainer, imgContain *container.TaskContainer) {
-	// 配置加载
-	netConfig := config.InitConfig()
 	// 设置Gin模式
-	gin.SetMode(netConfig.Mode)
+	gin.SetMode(config.CONFIG.Mode)
 
 	// 创建Gin引擎
 	r := gin.New()
@@ -101,7 +127,7 @@ func startHttp(con *container.DbContainer, imgContain *container.TaskContainer) 
 	r.Use(service.ErrorHandlerMiddleware()) // 最后处理错误
 
 	// 性能分析 (仅在debug模式下)
-	if netConfig.Mode == "debug" {
+	if config.CONFIG.Mode == "debug" {
 		pprof.Register(r)
 	}
 
@@ -110,11 +136,11 @@ func startHttp(con *container.DbContainer, imgContain *container.TaskContainer) 
 
 	// 创建HTTP服务器
 	srv := &http.Server{
-		Addr:         ":" + netConfig.Port,
+		Addr:         ":" + config.CONFIG.Port,
 		Handler:      r,
-		ReadTimeout:  netConfig.ReadTimeout,
-		WriteTimeout: netConfig.WriteTimeout,
-		IdleTimeout:  netConfig.IdleTimeout,
+		ReadTimeout:  config.CONFIG.ReadTimeout,
+		WriteTimeout: config.CONFIG.WriteTimeout,
+		IdleTimeout:  config.CONFIG.IdleTimeout,
 	}
 
 	// 优雅关闭
@@ -123,7 +149,7 @@ func startHttp(con *container.DbContainer, imgContain *container.TaskContainer) 
 
 	// 启动服务器
 	go func() {
-		logger.Infof("Server starting on port 127.0.0.1:%s", netConfig.Port)
+		logger.Infof("Server starting on port 127.0.0.1:%s", config.CONFIG.Port)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatalf("Failed to start server: %v", err)
 			// 发送信号给主goroutine，让它知道启动失败

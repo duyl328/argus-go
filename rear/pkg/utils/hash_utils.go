@@ -9,6 +9,7 @@ import (
 	"hash"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -325,6 +326,31 @@ func (h hashUtilsStruct) HashFileMultipleAlgorithms(filename string, hashTypes [
 	}
 
 	return results, nil
+}
+
+// HashThumbPath 将 Hash 转换为具体路径
+func (h hashUtilsStruct) HashThumbPath(
+	basePath string,
+	hash string,
+	filename string, // 文件名，不带扩展名
+	ext string, // 扩展名，不带点，如 "jpg", "webp"
+) string {
+	var parts []string
+	start := 0
+	segments := []int{2, 2, 2}
+	for _, length := range segments {
+		end := start + length
+		if end > len(hash) {
+			break
+		}
+		parts = append(parts, hash[start:end])
+		start = end
+	}
+	parts = append(parts, hash) // 最后一级目录为完整 hash
+
+	dir := filepath.Join(append([]string{basePath}, parts...)...)
+	fullName := fmt.Sprintf("%s.%s", filename, ext)
+	return filepath.Join(dir, fullName)
 }
 
 // 便捷函数

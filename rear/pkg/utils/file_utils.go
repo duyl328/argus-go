@@ -34,7 +34,7 @@ type fileUtilsStruct struct{}
 // FileUtils 是对外暴露的文件工具对象
 var FileUtils = fileUtilsStruct{}
 
-// 1. 检查文件或目录是否存在
+// Exists 1. 检查文件或目录是否存在
 func (fileUtilsStruct) Exists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)

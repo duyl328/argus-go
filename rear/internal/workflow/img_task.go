@@ -5,11 +5,16 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/h2non/filetype"
+	"go.uber.org/zap"
 	"os"
 	"os/exec"
+	"rear/internal/consts"
+	"rear/internal/utils/tools"
+	"rear/pkg/logger"
+	"rear/pkg/utils"
 	"runtime"
 	"sync"
 	"time"
@@ -85,17 +90,100 @@ func (pt *PictureTask) Resume() {
 func (pt *PictureTask) Run() {
 	pt.setStatus(StatusRunning)
 
+	// 文件是否存在
 	if !fileExists(pt.Path) {
-		pt.setError(errors.New("file does not exist"))
+		logger.Error(
+			"指定文件不存在!",
+			zap.String("path", pt.Path),
+		)
 		return
 	}
+
+	pt.waitIfPaused()
+	// 读取文件
+	buf, err := os.ReadFile(pt.Path)
+	if err != nil {
+		logger.Error(
+			"文件读取失败!",
+			zap.String("path", pt.Path),
+		)
+		return
+	}
+
+	pt.waitIfPaused()
+	// 检测照片格式
+	kind, err := filetype.Match(buf)
+	if err != nil {
+		logger.Error(
+			"文件类型匹配失败!",
+			zap.String("path", pt.Path),
+		)
+		return
+	}
+
+	pt.waitIfPaused()
+
+	// 不同图像类型不同的处理方式
+	fileType := kind.Extension
+	logger.Info("探测到的文件类型.", zap.String("fileType", fileType))
+
+	// 读取 hash
+	hash, err := utils.HashUtils.HashFile(pt.Path, utils.SHA256)
+	if err != nil {
+		logger.Error(
+			"Hash获取失败!",
+			zap.String("path", pt.Path),
+		)
+		return
+	}
+	logger.Info("获取到 Hash", zap.String("hash", hash))
+
+	// 获取基本信息，如果图像的很小则不进行压缩
+	ctx := context.Background()
+	exifData, err := tools.GetExifData(ctx, pt.Path)
+	if err != nil {
+		logger.Error(
+			"EXIF数据获取失败!",
+			zap.String("path", pt.Path),
+			zap.Error(err),
+		)
+		return
+	}
+	logger.Info("获取到 EXIF 数据", zap.Any("exifData", exifData))
+
+	return
+	// 如果是非常规格式或 raw 则转换为 png ；如果是 PNG 则无损转换为 webp 或 jpg；如果是 webp 或 jpg 则进行压缩和其他处理
+	if fileType == string(consts.FormatJPG) {
+		//options := tools.DefaultOptions()
+		//options.MaxSize = 800
+		//options.Quality = 90
+		//options.Format = "jpeg"
+		//tools.LibVipsUtil.ProcessImage(options)
+	} else if fileType == string(consts.FormatWEBP) {
+	} else if fileType == string(consts.FormatPNG) {
+	} else {
+
+	}
+
+	// 分割 Hash 路径
+	//utils.HashUtils.HashThumbPath(config.CONFIG.AppDir, hash)
+
+	// 压缩图像
+	// 获取 exif
+	// 保存到数据库
 
 	pt.waitIfPaused()
 	data, err := os.ReadFile(pt.Path)
 	if err != nil {
 		pt.setError(err)
+		logger.Error(
+			"文件读取失败!",
+			zap.String("filename", pt.Path),
+			zap.Error(err),
+		)
 		return
 	}
+
 	pt.ImageBuf = data
 	pt.Hash = calcHash(data)
 
@@ -288,21 +376,23 @@ func getCurrentCPUUsage() int {
 // --- 工具函数 ---
 
 func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
+	return utils.FileUtils.Exists(path)
 }
 
 func calcHash(data []byte) string {
+	logger.Info("calcHash")
 	h := sha1.Sum(data)
 	return hex.EncodeToString(h[:])
 }
 
 func compressImage(data []byte) ([]byte, error) {
+	logger.Info("compressImage")
 	time.Sleep(100 * time.Millisecond) // 模拟耗时
 	return data, nil
 }
 
 func readExifViaCmd(filePath string) (map[string]string, error) {
+	logger.Info("readExifViaCmd")
 	cmd := exec.Command("exiftool", filePath)
 	out, err := cmd.Output()
 	if err != nil {
@@ -322,6 +412,7 @@ func readExifViaCmd(filePath string) (map[string]string, error) {
 }
 
 func saveToDB(hash string, exif map[string]string) error {
+	logger.Info("saveToDB")
 	fmt.Printf("Saving %s to DB with %d exif fields\n", hash, len(exif))
 	return nil
 }
