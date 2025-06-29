@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"rear/internal/consts"
+	"rear/internal/model"
 	"rear/internal/utils/tools"
 	"rear/pkg/logger"
 	"rear/pkg/utils"
@@ -149,9 +150,10 @@ func (pt *PictureTask) Run() {
 		)
 		return
 	}
-	logger.Info("获取到 EXIF 数据", zap.Any("exifData", exifData))
 
-	return
+	// 分割 EXIF 数据
+	splitExifData := model.SplitExifData(exifData)
+
 	// 如果是非常规格式或 raw 则转换为 png ；如果是 PNG 则无损转换为 webp 或 jpg；如果是 webp 或 jpg 则进行压缩和其他处理
 	if fileType == string(consts.FormatJPG) {
 		//options := tools.DefaultOptions()
@@ -165,10 +167,23 @@ func (pt *PictureTask) Run() {
 
 	}
 
+	// 图像转换后，将转换后照片信息检索判断是否有必要进行压缩
+
+	// 压缩图像 【判断图像的大小是否需要压缩】
+	imgWidth := splitExifData.BaseInfo.ImageWidth
+	imgHeight := splitExifData.BaseInfo.ImageHeight
+	logger.Info("图像宽度",
+		zap.Int("width", imgWidth),
+		zap.Int("height", imgHeight),
+	)
+
+	// 如果图像的宽度或高度小于 800，则不进行压缩
+
+	return
+
 	// 分割 Hash 路径
 	//utils.HashUtils.HashThumbPath(config.CONFIG.AppDir, hash)
 
-	// 压缩图像
 	// 获取 exif
 	// 保存到数据库
 
