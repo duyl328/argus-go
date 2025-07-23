@@ -18,6 +18,8 @@ type ImageCompressionOptions struct {
 	ThumbnailSize []int
 	// 缩略图质量
 	ThumbnailQuality int
+	// 用户屏幕尺寸大小
+	ScreenSize int
 }
 
 // PathConfig 路径相关配置
@@ -64,8 +66,9 @@ var CONFIG Config
 func InitConfig() *Config {
 	i := ImageCompressionOptions{
 		ThumbnailFormat:  consts.FormatJPG,
-		ThumbnailSize:    []int{256, 512, 720},
+		ThumbnailSize:    []int{512, 720},
 		ThumbnailQuality: 80,
+		ScreenSize:       1080,
 	}
 	pathConfig := PathConfig{
 		CachePath:     "cache",

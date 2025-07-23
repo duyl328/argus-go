@@ -35,7 +35,14 @@ func main() {
 	config.InitConfig()
 
 	// 日志初始化
-	err := logger.InitDefaultLogger()
+	err, logPath := getLogPath() // 获取日志路径
+	if err != nil {
+		log.Fatal("获取日志路径失败:", err)
+		return
+	}
+	logConfig := logger.DefaultConfig()
+	logConfig.LogPath = logPath
+	err = logger.InitDefaultLogger(logConfig)
 	if err != nil {
 		// log.Fatal 会输出错误信息并调用 os.Exit(1)
 		log.Fatalf("Failed to initialize logger: %v", err)
@@ -86,6 +93,17 @@ func main() {
 
 	// 启动 http
 	startHttp(newContainer, newTaskContainer)
+}
+
+// 获取日志路径
+func getLogPath() (error, string) {
+	join := filepath.Join(config.CONFIG.AppDir, config.CONFIG.PathConfig.LogPath)
+	err := utils.FileUtils.CreateDir(join)
+	if err != nil {
+		logger.Error("日志文件夹创建失败！", zap.String("path", join), zap.Error(err))
+		return err, ""
+	}
+	return nil, join
 }
 
 // 创建软件所需的缓存目录等内容

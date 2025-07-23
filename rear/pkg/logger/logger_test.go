@@ -27,7 +27,7 @@ func main() {
 	defaultLogger.Info("Application started with default config")
 
 	// 示例2: 使用自定义配置
-	customConfig := &Config{
+	customConfig := &LogConfig{
 		Level:           InfoLevel,
 		LogPath:         "./logs/custom.log",
 		MaxSize:         2,    // 2MB
@@ -91,7 +91,7 @@ func main() {
 	requestLogger.Infof("Request completed in %dms", 250)
 
 	// 示例8: 初始化全局默认日志器
-	err = InitDefaultLogger(&Config{
+	err = InitDefaultLogger(&LogConfig{
 		Level:         DebugLevel,
 		LogPath:       "./logs/global.log",
 		MaxSize:       1,

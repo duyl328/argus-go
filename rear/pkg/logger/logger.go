@@ -22,8 +22,8 @@ const (
 	FatalLevel
 )
 
-// Config 日志配置
-type Config struct {
+// LogConfig 日志配置
+type LogConfig struct {
 	Level           LogLevel `json:"level"`             // 日志级别
 	LogPath         string   `json:"log_path"`          // 日志文件路径
 	MaxSize         int      `json:"max_size"`          // 单个日志文件最大大小(MB)
@@ -40,14 +40,14 @@ type Config struct {
 type Logger struct {
 	zap    *zap.Logger
 	sugar  *zap.SugaredLogger
-	config *Config
+	config *LogConfig
 }
 
-// defaultConfig 默认配置
-func defaultConfig() *Config {
-	return &Config{
+// DefaultConfig 默认配置
+func DefaultConfig() *LogConfig {
+	return &LogConfig{
 		Level:           InfoLevel,
-		LogPath:         "./logs/app.log",
+		LogPath:         "./logs",
 		MaxSize:         1,    // 1MB
 		MaxBackups:      30,   // 保留30个备份
 		MaxAge:          7,    // 保留7天
@@ -60,13 +60,14 @@ func defaultConfig() *Config {
 }
 
 // NewLogger 创建新的日志器
-func NewLogger(skipCaller int, config ...*Config) (*Logger, error) {
-	var cfg *Config
+func NewLogger(skipCaller int, config ...*LogConfig) (*Logger, error) {
+	var cfg *LogConfig
 	if len(config) > 0 && config[0] != nil {
 		cfg = config[0]
 	} else {
-		cfg = defaultConfig()
+		cfg = DefaultConfig()
 	}
+	cfg.LogPath = filepath.Join(cfg.LogPath, "app.log")
 
 	// 确保日志目录存在
 	logDir := filepath.Dir(cfg.LogPath)
@@ -279,7 +280,7 @@ func (l *Logger) GetSugarLogger() *zap.SugaredLogger {
 var defaultLogger *Logger
 
 // InitDefaultLogger 初始化默认日志器
-func InitDefaultLogger(config ...*Config) error {
+func InitDefaultLogger(config ...*LogConfig) error {
 	var err error
 	defaultLogger, err = NewLogger(2, config...)
 	return err

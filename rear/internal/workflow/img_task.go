@@ -7,13 +7,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/h2non/filetype"
 	"go.uber.org/zap"
 	"os"
 	"os/exec"
-	"rear/internal/consts"
-	"rear/internal/model"
-	"rear/internal/utils/tools"
+	"rear/internal/api"
 	"rear/pkg/logger"
 	"rear/pkg/utils"
 	"runtime"
@@ -91,94 +88,20 @@ func (pt *PictureTask) Resume() {
 func (pt *PictureTask) Run() {
 	pt.setStatus(StatusRunning)
 
-	// 文件是否存在
-	if !fileExists(pt.Path) {
-		logger.Error(
-			"指定文件不存在!",
-			zap.String("path", pt.Path),
-		)
-		return
-	}
+	// 初始化文件处理
+	imageAPI, _ := api.NewImageAPI(pt.Path)
 
-	pt.waitIfPaused()
-	// 读取文件
-	buf, err := os.ReadFile(pt.Path)
+	// 获取基础信息
+	err := imageAPI.GetExif()
 	if err != nil {
-		logger.Error(
-			"文件读取失败!",
-			zap.String("path", pt.Path),
-		)
 		return
 	}
 
-	pt.waitIfPaused()
-	// 检测照片格式
-	kind, err := filetype.Match(buf)
-	if err != nil {
-		logger.Error(
-			"文件类型匹配失败!",
-			zap.String("path", pt.Path),
-		)
-		return
-	}
+	// 获取原图路径
 
-	pt.waitIfPaused()
+	// 获取压缩图片路径
 
-	// 不同图像类型不同的处理方式
-	fileType := kind.Extension
-	logger.Info("探测到的文件类型.", zap.String("fileType", fileType))
-
-	// 读取 hash
-	hash, err := utils.HashUtils.HashFile(pt.Path, utils.SHA256)
-	if err != nil {
-		logger.Error(
-			"Hash获取失败!",
-			zap.String("path", pt.Path),
-		)
-		return
-	}
-	logger.Info("获取到 Hash", zap.String("hash", hash))
-
-	// 获取基本信息，如果图像的很小则不进行压缩
-	ctx := context.Background()
-	exifData, err := tools.GetExifData(ctx, pt.Path)
-	if err != nil {
-		logger.Error(
-			"EXIF数据获取失败!",
-			zap.String("path", pt.Path),
-			zap.Error(err),
-		)
-		return
-	}
-
-	// 分割 EXIF 数据
-	splitExifData := model.SplitExifData(exifData)
-
-	// 如果是非常规格式或 raw 则转换为 png ；如果是 PNG 则无损转换为 webp 或 jpg；如果是 webp 或 jpg 则进行压缩和其他处理
-	if fileType == string(consts.FormatJPG) {
-		//options := tools.DefaultOptions()
-		//options.MaxSize = 800
-		//options.Quality = 90
-		//options.Format = "jpeg"
-		//tools.LibVipsUtil.ProcessImage(options)
-	} else if fileType == string(consts.FormatWEBP) {
-	} else if fileType == string(consts.FormatPNG) {
-	} else {
-
-	}
-
-	// 图像转换后，将转换后照片信息检索判断是否有必要进行压缩
-
-	// 压缩图像 【判断图像的大小是否需要压缩】
-	imgWidth := splitExifData.BaseInfo.ImageWidth
-	imgHeight := splitExifData.BaseInfo.ImageHeight
-	logger.Info("图像宽度",
-		zap.Int("width", imgWidth),
-		zap.Int("height", imgHeight),
-	)
-
-	// 如果图像的宽度或高度小于 800，则不进行压缩
-
+	imageAPI.GetImage()
 	return
 
 	// 分割 Hash 路径
