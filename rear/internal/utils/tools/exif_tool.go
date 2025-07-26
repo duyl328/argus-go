@@ -13,7 +13,7 @@ type ExifData map[string]interface{}
 
 // GetExifData 获取 EXIF 数据
 func GetExifData(ctx context.Context, input string) (ExifData, error) {
-	if err := utils.EnsureInitialized(); err != nil {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
 		return nil, err
 	}
 
@@ -37,7 +37,7 @@ func GetExifData(ctx context.Context, input string) (ExifData, error) {
 
 // GetExifField 获取特定的 EXIF 字段
 func GetExifField(ctx context.Context, input string, fields ...string) (map[string]string, error) {
-	if err := utils.EnsureInitialized(); err != nil {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
 		return nil, err
 	}
 
@@ -72,7 +72,7 @@ func GetExifField(ctx context.Context, input string, fields ...string) (map[stri
 
 // RemoveExifData 移除 EXIF 数据
 func RemoveExifData(ctx context.Context, input string, backup bool) error {
-	if err := utils.EnsureInitialized(); err != nil {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
 		return err
 	}
 
@@ -92,7 +92,7 @@ func RemoveExifData(ctx context.Context, input string, backup bool) error {
 
 // CopyExifData 复制 EXIF 数据从一个文件到另一个文件
 func CopyExifData(ctx context.Context, source, target string) error {
-	if err := utils.EnsureInitialized(); err != nil {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
 		return err
 	}
 
@@ -113,7 +113,7 @@ func CopyExifData(ctx context.Context, source, target string) error {
 
 // SetExifField 设置 EXIF 字段
 func SetExifField(ctx context.Context, input string, fields map[string]string) error {
-	if err := utils.EnsureInitialized(); err != nil {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
 		return err
 	}
 
@@ -133,7 +133,7 @@ func SetExifField(ctx context.Context, input string, fields map[string]string) e
 
 // IsExifToolAvailable 检查 ExifTool 是否可用
 func IsExifToolAvailable() bool {
-	if err := utils.EnsureInitialized(); err != nil {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
 		return false
 	}
 	return utils.ExifToolPath != ""
@@ -141,6 +141,6 @@ func IsExifToolAvailable() bool {
 
 // GetToolPaths 获取工具路径（用于调试）
 func GetToolPaths() (imageMagick, exifTool string) {
-	utils.EnsureInitialized()
+	utils.EnsureInitialized(nil, nil)
 	return utils.ImageMagickPath, utils.ExifToolPath
 }

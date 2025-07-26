@@ -86,6 +86,13 @@ func main() {
 		return
 	}
 
+	join2 := filepath.Join(config.CONFIG.AppDir, "tools", "imagemagick")
+	srcDir2 := `.\tools\windows_amd64\imagemagick\imagemagick` // 源目录
+	if err := utils.FileUtils.CopyDir(srcDir2, join2); err != nil {
+		fmt.Printf("复制失败: %v\n", err)
+		return
+	}
+
 	//if err := initDatabase(); err != nil {
 	//	logger.Fatalf("Failed to initialize database: %v", err)
 	//}

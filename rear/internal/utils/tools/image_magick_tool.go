@@ -18,7 +18,7 @@ type ImageInfo struct {
 // ConvertImage 使用 ImageMagick 转换图片
 // 示例: ConvertImage(ctx, "input.jpg", "output.png", "-quality", "90")
 func ConvertImage(ctx context.Context, input, output string, options ...string) error {
-	if err := utils.EnsureInitialized(); err != nil {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
 		return err
 	}
 
@@ -35,12 +35,20 @@ func ConvertImage(ctx context.Context, input, output string, options ...string) 
 
 // ResizeImage 调整图片大小
 func ResizeImage(ctx context.Context, input, output string, width, height int) error {
+	// 添加参数验证
+	if width <= 0 || height <= 0 {
+		return fmt.Errorf("invalid dimensions: width and height must be positive, got width=%d, height=%d", width, height)
+	}
 	size := fmt.Sprintf("%dx%d", width, height)
 	return ConvertImage(ctx, input, output, "-resize", size)
 }
 
 // ResizeImageKeepAspect 按比例调整图片大小（保持宽高比）
 func ResizeImageKeepAspect(ctx context.Context, input, output string, maxWidth, maxHeight int) error {
+	// 添加参数验证
+	if maxWidth <= 0 || maxHeight <= 0 {
+		return fmt.Errorf("invalid dimensions: maxWidth and maxHeight must be positive, got maxWidth=%d, maxHeight=%d", maxWidth, maxHeight)
+	}
 	size := fmt.Sprintf("%dx%d>", maxWidth, maxHeight)
 	return ConvertImage(ctx, input, output, "-resize", size)
 }
@@ -58,7 +66,7 @@ func RotateImage(ctx context.Context, input, output string, degrees float64) err
 
 // IsImageMagickAvailable 检查 ImageMagick 是否可用
 func IsImageMagickAvailable() bool {
-	if err := utils.EnsureInitialized(); err != nil {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
 		return false
 	}
 	return utils.ImageMagickPath != ""

@@ -33,7 +33,7 @@ type Config struct {
 }
 
 // Initialize 初始化工具路径（可选调用，如果不调用会在第一次使用时自动初始化）
-func Initialize(config *Config) error {
+func Initialize(config *Config, baseDir *string) error {
 	if config == nil {
 		config = &Config{}
 	}
@@ -42,26 +42,30 @@ func Initialize(config *Config) error {
 		ImageMagickPath = config.ImageMagickPath
 		ExifToolPath = config.ExifToolPath
 		VipsPath = config.VipsPath
-		toolsInitErr = detectTools()
+		toolsInitErr = detectTools(baseDir)
 	})
 
 	return toolsInitErr
 }
 
 // detectTools 检测工具路径
-func detectTools() error {
+func detectTools(baseDir *string) error {
 	// 获取可执行文件所在目录
 	execPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}
+
 	execDir := filepath.Dir(execPath)
+	if baseDir != nil {
+		execDir = *baseDir
+	}
 
 	// 检测 ImageMagick
 	if ImageMagickPath == "" {
-		ImageMagickPath = findTool("convert", execDir)
+		ImageMagickPath = findTool("magick", execDir, "imagemagick")
 		if ImageMagickPath == "" {
-			ImageMagickPath = findTool("magick", execDir)
+			ImageMagickPath = findTool("convert", execDir, "imagemagick")
 		}
 	}
 	if ImageMagickPath == "" {
@@ -70,7 +74,7 @@ func detectTools() error {
 
 	// 检测 ExifTool
 	if ExifToolPath == "" {
-		ExifToolPath = findTool("exiftool", execDir)
+		ExifToolPath = findTool("exiftool", execDir, "exiftool")
 	}
 	if ExifToolPath == "" {
 		return fmt.Errorf("ExifTool not found")
@@ -78,7 +82,7 @@ func detectTools() error {
 
 	// 检测 libvips
 	if VipsPath == "" {
-		VipsPath = findTool("vips", execDir)
+		VipsPath = findTool("vips", execDir, "vips")
 	}
 	if VipsPath == "" {
 		return fmt.Errorf("libvips not found")
@@ -88,7 +92,7 @@ func detectTools() error {
 }
 
 // findTool 查找工具
-func findTool(name string, execDir string) string {
+func findTool(name string, execDir string, identification string) string {
 	// Windows 下添加 .exe 后缀
 	exeName := name
 	if runtime.GOOS == "windows" {
@@ -107,6 +111,11 @@ func findTool(name string, execDir string) string {
 		filepath.Join(execDir, "tools", exeName),
 		filepath.Join(execDir, "tools", name, exeName),
 		filepath.Join(execDir, "tools", name, "bin", exeName),
+		filepath.Join(execDir, identification, exeName),
+		filepath.Join(execDir, identification, "bin", exeName),
+		filepath.Join(execDir, identification, "tools", exeName),
+		filepath.Join(execDir, identification, "tools", name, exeName),
+		filepath.Join(execDir, identification, "tools", name, "bin", exeName),
 	}
 	jsonBytes, _ := json.Marshal(searchPaths)
 	msg := string(jsonBytes)
@@ -127,9 +136,9 @@ func findTool(name string, execDir string) string {
 }
 
 // EnsureInitialized 确保工具已初始化
-func EnsureInitialized() error {
+func EnsureInitialized(config *Config, baseDir *string) error {
 	if toolsInitErr == nil && ImageMagickPath == "" && ExifToolPath == "" && VipsPath == "" {
-		return Initialize(nil)
+		return Initialize(config, baseDir)
 	}
 	return toolsInitErr
 }
