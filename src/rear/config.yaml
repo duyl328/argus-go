@@ -18,4 +18,3 @@ logging:
 
 database:
   type: "sqlite"
-  path: "argus.db"

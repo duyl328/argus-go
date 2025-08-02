@@ -232,7 +232,13 @@ func InitDatabase() error {
 		})
 	case config.SQLite:
 		// SQLite特殊配置
-		db, err = gorm.Open(sqlite.Open(databaseConfig.Database), &gorm.Config{
+		dbPath := databaseConfig.Path
+		if dbPath == "" {
+			// 如果没有配置路径，使用默认值
+			dbPath = "test.db"
+		}
+
+		db, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 			Logger: logger.Default.LogMode(logger.Info),
 		})
 		if err != nil {

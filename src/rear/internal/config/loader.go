@@ -41,6 +41,7 @@ type PathsConfig struct {
 	LogPath       string `yaml:"log_path" json:"log_path"`
 	TempPath      string `yaml:"temp_path" json:"temp_path"`
 	PngTempPath   string `yaml:"png_temp_path" json:"png_temp_path"`
+	DatabasePath  string `yaml:"database_path" json:"database_path"`
 }
 
 // LoggingConfig 日志配置
@@ -116,6 +117,7 @@ func GetDefaultFileConfig() *FileConfig {
 			LogPath:       "app-logs",
 			TempPath:      "app-tmp",
 			PngTempPath:   "png-tmp",
+			DatabasePath:  "db",
 		},
 		Logging: LoggingConfig{
 			Level:    "info",
@@ -123,12 +125,12 @@ func GetDefaultFileConfig() *FileConfig {
 		},
 		Database: DatabaseConfig{
 			Type:         SQLite,
-			Database:     "test.db",
+			Database:     "argus",
 			Host:         "localhost",
 			Port:         "3306",
 			Username:     "",
 			Password:     "",
-			DBPath:       "",
+			Path:         "",
 			MaxIdleConns: 1,
 			MaxOpenConns: 1,
 			MaxLifetime:  0,
@@ -214,6 +216,9 @@ func MergeWithDefaults(fileConfig *FileConfig) *FileConfig {
 	}
 	if fileConfig.Paths.PngTempPath == "" {
 		fileConfig.Paths.PngTempPath = defaultConfig.Paths.PngTempPath
+	}
+	if fileConfig.Paths.DatabasePath == "" {
+		fileConfig.Paths.DatabasePath = defaultConfig.Paths.DatabasePath
 	}
 
 	// Logging配置合并

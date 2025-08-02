@@ -33,6 +33,8 @@ type PathConfig struct {
 	TempPath string
 	// png 临时文件
 	PngTempPath string
+	// 数据库路径
+	DatabasePath string
 }
 
 // Config 配置结构
@@ -109,6 +111,7 @@ func InitConfig() *Config {
 		LogPath:       fileConfig.Paths.LogPath,
 		TempPath:      fileConfig.Paths.TempPath,
 		PngTempPath:   fileConfig.Paths.PngTempPath,
+		DatabasePath:  fileConfig.Paths.DatabasePath,
 	}
 
 	CONFIG = Config{
@@ -148,16 +151,52 @@ func convertToImageFormat(format string) consts.ImageFormat {
 // GetDatabaseConfig 获取数据库配置
 func GetDatabaseConfig() DatabaseConfig {
 	if CONFIG.FileConfig != nil {
-		return CONFIG.FileConfig.Database
+		dbConfig := CONFIG.FileConfig.Database
+
+		// 如果是SQLite且需要处理路径
+		if dbConfig.Type == SQLite {
+			dbConfig.Path = processSQLitePath(dbConfig.Path)
+		}
+
+		return dbConfig
 	}
 	// 返回默认配置
 	return DatabaseConfig{
 		Type:         SQLite,
-		Database:     "test.db",
+		Path:         processSQLitePath(""),
+		Database:     "argus",
 		MaxIdleConns: 1,
 		MaxOpenConns: 1,
 		MaxLifetime:  0,
 	}
+}
+
+// processSQLitePath 处理SQLite数据库路径
+// 如果用户指定了路径，使用用户指定的
+// 如果没有指定，在运行文件根目录下创建db文件夹，并使用db.sqlite作为文件名
+func processSQLitePath(configPath string) string {
+	// 如果用户指定了路径，直接使用
+	if configPath != "" {
+		// 如果是相对路径，转换为基于AppDir的绝对路径
+		if !filepath.IsAbs(configPath) {
+			return filepath.Join(CONFIG.AppDir, configPath)
+		}
+		return configPath
+	}
+
+	// 用户没有指定路径，使用默认路径：AppDir/db/db.sqlite
+	dbDir := filepath.Join(CONFIG.AppDir, "db")
+	dbFile := filepath.Join(dbDir, "db.sqlite")
+
+	// 确保db目录存在
+	if err := os.MkdirAll(dbDir, 0755); err != nil {
+		// 如果创建目录失败，记录警告但继续使用该路径
+		logger.Warn("创建数据库目录失败，但将继续使用该路径",
+			zap.String("path", dbDir),
+			zap.Error(err))
+	}
+
+	return dbFile
 }
 
 // IsDevelopment 判断是否为开发阶段
