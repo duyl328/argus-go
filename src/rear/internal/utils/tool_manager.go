@@ -123,12 +123,12 @@ func detectTools(baseDir *string) error {
 
 	// 检测 libvips
 	if VipsPath == "" {
-		VipsPath = findTool("vips", execDir, "vips")
+		VipsPath = findTool("vips", execDir, "libvips")
 	} else {
 		// 验证配置的路径是否有效
 		if !validateToolPath(VipsPath) {
 			logger.Warn("配置的LibVips路径无效，尝试自动检测", zap.String("path", VipsPath))
-			VipsPath = findTool("vips", execDir, "vips")
+			VipsPath = findTool("vips", execDir, "libvips")
 		}
 	}
 	if VipsPath == "" {
@@ -170,21 +170,34 @@ func findTool(name string, execDir string, identification string) string {
 	// 2. 执行文件同目录的 bin 子目录
 	// 3. 执行文件同目录的 tools 子目录
 	// 4. 系统 PATH
-
 	searchPaths := []string{
 		filepath.Join(execDir, exeName),
 		filepath.Join(execDir, "bin", exeName),
 		filepath.Join(execDir, "tools", exeName),
 		filepath.Join(execDir, "tools", name, exeName),
 		filepath.Join(execDir, "tools", name, "bin", exeName),
-		filepath.Join(execDir, "tools", identification, exeName),
-		filepath.Join(execDir, "tools", identification, name, exeName),
-		filepath.Join(execDir, "tools", identification, name, "bin", exeName),
+		filepath.Join(execDir, "tools", "bin", name, exeName),
+		filepath.Join(execDir, "tools", "bin", exeName),
+
 		filepath.Join(execDir, identification, exeName),
 		filepath.Join(execDir, identification, "bin", exeName),
 		filepath.Join(execDir, identification, "tools", exeName),
 		filepath.Join(execDir, identification, "tools", name, exeName),
 		filepath.Join(execDir, identification, "tools", name, "bin", exeName),
+		filepath.Join(execDir, identification, "tools", "bin", name, exeName),
+		filepath.Join(execDir, identification, "tools", "bin", exeName),
+
+		filepath.Join(execDir, identification, "tools", identification, exeName),
+		filepath.Join(execDir, identification, "tools", identification, name, exeName),
+		filepath.Join(execDir, identification, "tools", identification, name, "bin", exeName),
+		filepath.Join(execDir, identification, "tools", identification, "bin", name, exeName),
+		filepath.Join(execDir, identification, "tools", identification, "bin", exeName),
+
+		filepath.Join(execDir, "tools", identification, exeName),
+		filepath.Join(execDir, "tools", identification, name, exeName),
+		filepath.Join(execDir, "tools", identification, name, "bin", exeName),
+		filepath.Join(execDir, "tools", identification, "bin", name, exeName),
+		filepath.Join(execDir, "tools", identification, "bin", exeName),
 	}
 	jsonBytes, _ := json.Marshal(searchPaths)
 	msg := string(jsonBytes)
@@ -205,6 +218,32 @@ func findTool(name string, execDir string, identification string) string {
 
 	logger.Warn("未找到工具", zap.String("tool", name))
 	return ""
+}
+
+// generateSearchPaths 返回 execDir + 任意 segment 组合 + exeName 的路径列表
+func generateSearchPaths(execDir, exeName string, segments ...string) []string {
+	var result []string
+
+	// 加入 execDir/exeName 本身
+	result = append(result, filepath.Join(execDir, exeName))
+
+	n := len(segments)
+
+	// 枚举所有非空子集（使用位图方法）
+	for i := 1; i < (1 << n); i++ {
+		var parts []string
+		for j := 0; j < n; j++ {
+			if (i>>j)&1 == 1 {
+				parts = append(parts, segments[j])
+			}
+		}
+		// 拼接 execDir + parts... + exeName
+		full := append([]string{execDir}, parts...)
+		full = append(full, exeName)
+		result = append(result, filepath.Join(full...))
+	}
+
+	return result
 }
 
 // EnsureInitialized 确保工具已初始化

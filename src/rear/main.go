@@ -22,6 +22,7 @@ import (
 	"rear/internal/utils"
 	"rear/pkg/logger"
 	utilsPkg "rear/pkg/utils"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -289,12 +290,49 @@ func initializeToolDependencies() error {
 	return nil
 }
 
+// getPlatformDir 获取当前平台对应的目录名
+func getPlatformDir() string {
+	osName := runtime.GOOS
+	arch := runtime.GOARCH
+
+	switch osName {
+	case "windows":
+		if arch == "amd64" {
+			return "windows_amd64"
+		}
+		return "windows_" + arch
+	case "darwin":
+		if arch == "amd64" {
+			return "darwin_amd64"
+		} else if arch == "arm64" {
+			return "darwin_arm64"
+		}
+		return "darwin_" + arch
+	case "linux":
+		if arch == "amd64" {
+			return "linux_amd64"
+		}
+		return "linux_" + arch
+	default:
+		return osName + "_" + arch
+	}
+}
+
 // extractToolFromZip 从压缩包中解压工具到构建目录
 func extractToolFromZip(toolName string) error {
 	logger.Infof("处理工具: %s", toolName)
 
-	// 源压缩包目录
-	sourceDir := filepath.Join("tools", toolName)
+	// 获取当前平台目录
+	platformDir := getPlatformDir()
+	logger.Infof("当前平台: %s", platformDir)
+
+	// 源压缩包目录（包含平台子目录）
+	sourceDir := filepath.Join("tools", platformDir, toolName)
+
+	// 检查平台特定目录是否存在
+	if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
+		return fmt.Errorf("平台目录不存在: %s，请确保为当前平台 %s 提供了 %s 工具包", sourceDir, platformDir, toolName)
+	}
 
 	// 目标解压目录
 	targetDir := filepath.Join(config.CONFIG.AppDir, "tools", toolName)
@@ -318,7 +356,54 @@ func extractToolFromZip(toolName string) error {
 		return fmt.Errorf("解压失败: %v", err)
 	}
 
+	// Windows平台特定的后处理
+	if err := postProcessTool(toolName, targetDir); err != nil {
+		logger.Warnf("工具 %s 后处理失败: %v", toolName, err)
+	}
+
 	logger.Infof("工具 %s 解压完成", toolName)
+	return nil
+}
+
+// postProcessTool 对解压后的工具进行平台特定的后处理
+func postProcessTool(toolName, targetDir string) error {
+	// 只在Windows平台进行后处理
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+
+	switch toolName {
+	case "exiftool":
+		return postProcessExiftool(targetDir)
+	}
+
+	return nil
+}
+
+// postProcessExiftool 对exiftool进行Windows平台的后处理
+func postProcessExiftool(targetDir string) error {
+	// 检查是否存在 exiftool(-k).exe
+	oldPath := filepath.Join(targetDir, "exiftool(-k).exe")
+	newPath := filepath.Join(targetDir, "exiftool.exe")
+
+	// 如果 exiftool(-k).exe 存在
+	if fileExists(oldPath) {
+		// 如果 exiftool.exe 已经存在，先删除它
+		if fileExists(newPath) {
+			if err := os.Remove(newPath); err != nil {
+				return fmt.Errorf("删除现有的 exiftool.exe 失败: %v", err)
+			}
+			logger.Infof("删除现有的 exiftool.exe")
+		}
+
+		// 重命名 exiftool(-k).exe 为 exiftool.exe
+		if err := os.Rename(oldPath, newPath); err != nil {
+			return fmt.Errorf("重命名 exiftool(-k).exe 为 exiftool.exe 失败: %v", err)
+		}
+
+		logger.Infof("已将 exiftool(-k).exe 重命名为 exiftool.exe")
+	}
+
 	return nil
 }
 
@@ -367,6 +452,11 @@ func isToolReady(targetDir, toolName string) bool {
 	// 根据不同工具检查关键文件是否存在
 	switch toolName {
 	case "exiftool":
+		// Windows平台下经过后处理后应该只有 exiftool.exe
+		if runtime.GOOS == "windows" {
+			return fileExists(filepath.Join(targetDir, "exiftool.exe"))
+		}
+		// 其他平台检查两个可能的文件名
 		return fileExists(filepath.Join(targetDir, "exiftool(-k).exe")) ||
 			fileExists(filepath.Join(targetDir, "exiftool.exe"))
 	case "imagemagick":
@@ -415,23 +505,60 @@ func extractZip(src, dest string) error {
 	return nil
 }
 
-// extractFile 解压单个文件
+// extractFile 解压单个文件（扁平化解压，跳过顶层目录）
 func extractFile(f *zip.File, destDir string) error {
+	// 获取文件在压缩包中的路径
+	zipPath := f.Name
+
+	// 如果是以 / 或 \ 开头的路径，去掉开头的分隔符
+	zipPath = strings.TrimPrefix(zipPath, "/")
+	zipPath = strings.TrimPrefix(zipPath, "\\")
+
+	// 将路径分割为目录组件
+	pathParts := strings.Split(zipPath, "/")
+	if len(pathParts) == 0 {
+		return nil // 跳过空路径
+	}
+
+	// 如果只有一个组件且是目录，跳过（这通常是顶层目录）
+	if len(pathParts) == 1 && f.FileInfo().IsDir() {
+		return nil
+	}
+
+	// 构建目标路径：跳过第一个目录组件（顶层目录）
+	var relativePath string
+	if len(pathParts) > 1 {
+		// 跳过顶层目录，保留子路径
+		relativePath = filepath.Join(pathParts[1:]...)
+	} else {
+		// 如果只有一个组件且是文件，直接使用文件名
+		relativePath = pathParts[0]
+	}
+
 	// 构建完整的目标路径
-	path := filepath.Join(destDir, f.Name)
+	targetPath := filepath.Join(destDir, relativePath)
 
 	// 确保路径安全（防止zip slip攻击）
-	if !strings.HasPrefix(path, filepath.Clean(destDir)+string(os.PathSeparator)) {
+	cleanDestDir := filepath.Clean(destDir)
+	cleanTargetPath := filepath.Clean(targetPath)
+
+	// 检查目标路径是否在destDir范围内
+	if !strings.HasPrefix(cleanTargetPath, cleanDestDir) ||
+		(len(cleanTargetPath) > len(cleanDestDir) &&
+			cleanTargetPath[len(cleanDestDir)] != filepath.Separator) {
 		return fmt.Errorf("无效的文件路径: %s", f.Name)
 	}
 
 	if f.FileInfo().IsDir() {
-		// 创建目录
-		return os.MkdirAll(path, f.FileInfo().Mode())
+		// 创建目录（如果需要的话）
+		if len(pathParts) > 1 {
+			return os.MkdirAll(targetPath, f.FileInfo().Mode())
+		}
+		return nil // 跳过顶层目录
 	}
 
 	// 创建父目录
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
 		return err
 	}
 
@@ -443,7 +570,7 @@ func extractFile(f *zip.File, destDir string) error {
 	defer rc.Close()
 
 	// 创建目标文件
-	outFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.FileInfo().Mode())
+	outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.FileInfo().Mode())
 	if err != nil {
 		return err
 	}
