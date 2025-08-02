@@ -5,333 +5,457 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"rear/internal/consts"
 	"rear/internal/utils"
 	"strconv"
 	"strings"
 )
 
-// ProcessOptions 图像处理选项
-type ProcessOptions struct {
-	// 基础选项
-	MaxSize int    // 最长边的最大尺寸（保持比例）
-	Quality int    // 压缩质量 (1-100)
-	Format  string // 输出格式 (jpeg, png, webp, avif等)
-
-	// 高级选项
-	Strip      bool   // 是否移除EXIF等元数据
-	Interlace  bool   // 是否启用渐进式JPEG
-	Optimize   bool   // 是否启用优化
-	Background string // 背景色（处理透明图像时）
-	Sharpen    bool   // 是否启用锐化
-	AutoRotate bool   // 是否根据EXIF自动旋转
-
-	// WebP特定选项
-	WebPLossless bool // WebP无损压缩
-	WebPEffort   int  // WebP压缩努力程度 (0-6)
-
-	// 尺寸控制
-	Width  int  // 固定宽度（如果设置则忽略MaxSize）
-	Height int  // 固定高度（如果设置则忽略MaxSize）
-	Crop   bool // 是否裁剪以填充指定尺寸
-}
-
-// VipsImageInfo vips图片信息
+// VipsImageInfo VIPS 图片信息
 type VipsImageInfo struct {
-	Format     string
-	Width      int
-	Height     int
-	Channels   int
-	ColorSpace string
-	FileSize   string
+	Format     string  `json:"format"`
+	Width      int     `json:"width"`
+	Height     int     `json:"height"`
+	Bands      int     `json:"bands"`      // 通道数
+	HasAlpha   bool    `json:"has_alpha"`  // 是否有透明通道
+	ColorSpace string  `json:"colorspace"` // 颜色空间
+	FileSize   int64   `json:"file_size"`  // 文件大小（字节）
+	DPI        float64 `json:"dpi"`        // DPI
 }
 
-// DefaultOptions 返回默认处理选项
-func DefaultOptions() *ProcessOptions {
-	return &ProcessOptions{
-		MaxSize:      512,
-		Quality:      85,
-		Format:       "jpeg",
-		Strip:        true,
-		Interlace:    false,
-		Optimize:     true,
-		Background:   "white",
-		Sharpen:      false,
-		AutoRotate:   true,
-		WebPLossless: false,
-		WebPEffort:   4,
-		Width:        0,
-		Height:       0,
-		Crop:         false,
-	}
+// VipsCropPosition 裁剪位置枚举
+type VipsCropPosition string
+
+const (
+	VipsCropTop    VipsCropPosition = "top"
+	VipsCropCenter VipsCropPosition = "center"
+	VipsCropBottom VipsCropPosition = "bottom"
+	VipsCropSmart  VipsCropPosition = "smart"  // 智能裁剪
+	VipsCropCustom VipsCropPosition = "custom" // 自定义位置
+)
+
+// VipsConvertOptions 转换选项
+type VipsConvertOptions struct {
+	Quality     int  // 质量 (1-100)
+	StripMeta   bool // 删除元数据
+	Progressive bool // 渐进式 (仅JPEG)
+	Lossless    bool // 无损压缩 (仅WEBP)
 }
 
-// ProcessImageWithVips 使用 libvips 处理图像
-// 示例: ProcessImageWithVips(ctx, "input.jpg", "output.webp", DefaultOptions())
-func ProcessImageWithVips(ctx context.Context, inputPath, outputPath string, options *ProcessOptions) error {
-	if err := utils.EnsureInitialized(); err != nil {
-		return err
-	}
-
-	if options == nil {
-		options = DefaultOptions()
-	}
-
-	// 检查输入文件是否存在
-	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
-		return fmt.Errorf("input file not found: %s", inputPath)
-	}
-
-	// 确保输出目录存在
-	outputDir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	// 构建vips命令参数
-	args := buildVipsArgs(inputPath, outputPath, options)
-
-	// 执行命令
-	result, err := utils.ExecuteCommand(ctx, utils.VipsPath, args...)
-	if err != nil {
-		return fmt.Errorf("vips command failed: %w, stderr: %s", err, string(result.Stderr))
-	}
-
-	return nil
+// VipsResizeOptions 调整大小选项
+type VipsResizeOptions struct {
+	Width      int     // 目标宽度
+	Height     int     // 目标高度
+	KeepAspect bool    // 保持宽高比
+	Scale      float64 // 缩放比例 (优先级高于宽高)
+	NoEnlarge  bool    // 不放大图片
 }
 
-// ThumbnailImage 生成缩略图（使用vips thumbnail命令）
-func ThumbnailImage(ctx context.Context, input, output string, size int) error {
-	return ProcessImageWithVips(ctx, input, output, &ProcessOptions{
-		MaxSize: size,
-		Quality: 85,
-		Strip:   true,
-	})
+// VipsCropOptions 裁剪选项
+type VipsCropOptions struct {
+	Position VipsCropPosition // 裁剪位置
+	X        int              // 自定义裁剪起始X坐标
+	Y        int              // 自定义裁剪起始Y坐标
 }
 
-// ResizeImageWithVips 使用vips调整图片大小
-func ResizeImageWithVips(ctx context.Context, input, output string, width, height int) error {
-	return ProcessImageWithVips(ctx, input, output, &ProcessOptions{
-		Width:   width,
-		Height:  height,
-		Quality: 85,
-		Strip:   true,
-	})
-}
-
-// ResizeImageKeepAspectVips 使用vips按比例调整图片大小（保持宽高比）
-func ResizeImageKeepAspectVips(ctx context.Context, input, output string, maxSize int) error {
-	return ProcessImageWithVips(ctx, input, output, &ProcessOptions{
-		MaxSize: maxSize,
-		Quality: 85,
-		Strip:   true,
-	})
-}
-
-// ConvertImageFormat 转换图像格式
-func ConvertImageFormat(ctx context.Context, input, output, format string) error {
-	return ProcessImageWithVips(ctx, input, output, &ProcessOptions{
-		Format:  format,
-		Quality: 85,
-		Strip:   true,
-	})
-}
-
-// CompressImage 压缩图像
-func CompressImage(ctx context.Context, input, output string, quality int) error {
-	return ProcessImageWithVips(ctx, input, output, &ProcessOptions{
-		Quality:  quality,
-		Strip:    true,
-		Optimize: true,
-	})
-}
-
-// GetVipsImageInfo 获取图像信息
-func GetVipsImageInfo(ctx context.Context, imagePath string) (*VipsImageInfo, error) {
-	if err := utils.EnsureInitialized(); err != nil {
+// GetVipsImageInfo 获取图片基础信息
+func GetVipsImageInfo(ctx context.Context, inputPath string) (*VipsImageInfo, error) {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
 		return nil, err
 	}
+	// 构建 vipsheader.exe 的路径
+	vipsHeaderPath := filepath.Join(filepath.Dir(utils.VipsPath), "vipsheader.exe")
 
-	result, err := utils.ExecuteCommand(ctx, utils.VipsPath, "identify", imagePath)
+	// 执行 vipsheader -a 命令
+	result, err := utils.ExecuteCommand(ctx, vipsHeaderPath, "-a", inputPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get image info: %w", err)
+		return nil, fmt.Errorf("failed to get image info: %w, stderr: %s", err, string(result.Stderr))
 	}
 
-	// 解析vips identify输出
+	output := string(result.Stdout)
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
 	info := &VipsImageInfo{}
-	lines := strings.Split(string(result.Stdout), "\n")
+
 	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
 		if strings.Contains(line, ":") {
 			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				value := strings.TrimSpace(parts[1])
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
 
-				switch key {
-				case "format":
-					info.Format = value
-				case "width":
-					if w, err := strconv.Atoi(value); err == nil {
-						info.Width = w
-					}
-				case "height":
-					if h, err := strconv.Atoi(value); err == nil {
-						info.Height = h
-					}
-				case "channels":
-					if c, err := strconv.Atoi(value); err == nil {
-						info.Channels = c
-					}
-				case "interpretation":
-					info.ColorSpace = value
+			switch key {
+			case "width":
+				if w, err := strconv.Atoi(value); err == nil {
+					info.Width = w
 				}
+			case "height":
+				if h, err := strconv.Atoi(value); err == nil {
+					info.Height = h
+				}
+			case "bands":
+				if b, err := strconv.Atoi(value); err == nil {
+					info.Bands = b
+				}
+			case "format":
+				info.Format = value
+			case "interpretation":
+				info.ColorSpace = value
+			case "alpha":
+				info.HasAlpha = (value == "yes")
 			}
 		}
-	}
-
-	// 获取文件大小
-	if stat, err := os.Stat(imagePath); err == nil {
-		info.FileSize = fmt.Sprintf("%d bytes", stat.Size())
 	}
 
 	return info, nil
 }
 
-// BatchProcessImages 批量处理图像
-func BatchProcessImages(ctx context.Context, inputDir, outputDir string, options *ProcessOptions) error {
+// ConvertVipsImage 使用 VIPS 转换图片格式
+func ConvertVipsImage(ctx context.Context, inputPath, outputPath string, format consts.ImageFormat, options *VipsConvertOptions) error {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
+		return err
+	}
+
 	if options == nil {
-		options = DefaultOptions()
+		options = &VipsConvertOptions{Quality: 85}
 	}
 
-	// 支持的图像格式
-	supportedExts := map[string]bool{
-		".jpg":  true,
-		".jpeg": true,
-		".png":  true,
-		".gif":  true,
-		".webp": true,
-		".tiff": true,
-		".bmp":  true,
-		".tif":  true,
+	var args []string
+
+	switch format {
+	case consts.FormatJPG:
+		args = append(args, "jpegsave", inputPath, outputPath)
+		if options.Quality > 0 {
+			args = append(args, "--Q", strconv.Itoa(options.Quality))
+		}
+		if options.Progressive {
+			args = append(args, "--interlace")
+		}
+	case consts.FormatPNG:
+		args = append(args, "pngsave", inputPath, outputPath)
+		if options.Quality > 0 {
+			compression := 9 - (options.Quality-1)*9/99 // 转换为0-9范围
+			args = append(args, "--compression", strconv.Itoa(compression))
+		}
+	case consts.FormatWEBP:
+		args = append(args, "webpsave", inputPath, outputPath)
+		if options.Quality > 0 {
+			args = append(args, "--Q", strconv.Itoa(options.Quality))
+		}
+		if options.Lossless {
+			args = append(args, "--lossless")
+		}
+	default:
+		return fmt.Errorf("unsupported format: %s", format)
 	}
 
-	return filepath.Walk(inputDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+	// 删除元数据
+	if options.StripMeta {
+		args = append(args, "--strip")
+	}
 
-		if info.IsDir() {
-			return nil
-		}
+	result, err := utils.ExecuteCommand(ctx, utils.VipsPath, args...)
+	if err != nil {
+		return fmt.Errorf("vips convert failed: %w, stderr: %s", err, string(result.Stderr))
+	}
 
-		ext := strings.ToLower(filepath.Ext(path))
-		if !supportedExts[ext] {
-			return nil
-		}
-
-		// 计算相对路径
-		relPath, err := filepath.Rel(inputDir, path)
-		if err != nil {
-			return err
-		}
-
-		// 构建输出路径
-		outputPath := filepath.Join(outputDir, relPath)
-
-		// 根据输出格式修改扩展名
-		if options.Format != "" {
-			outputPath = strings.TrimSuffix(outputPath, filepath.Ext(outputPath)) + "." + options.Format
-		}
-
-		return ProcessImageWithVips(ctx, path, outputPath, options)
-	})
+	return nil
 }
 
-// IsVipsAvailable 检查 libvips 是否可用
+// ResizeVipsImage 调整图片大小
+func ResizeVipsImage(ctx context.Context, inputPath, outputPath string, options *VipsResizeOptions) error {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
+		return err
+	}
+
+	if options == nil {
+		return fmt.Errorf("resize options cannot be nil")
+	}
+
+	var args []string
+
+	// 如果指定了缩放比例，优先使用缩放
+	if options.Scale > 0 {
+		args = []string{"resize", inputPath, outputPath, strconv.FormatFloat(options.Scale, 'f', 2, 64)}
+	} else {
+		// 获取原图信息以计算缩放比例
+		info, err := GetVipsImageInfo(ctx, inputPath)
+		if err != nil {
+			return fmt.Errorf("failed to get image info: %w", err)
+		}
+
+		var scale float64
+		if options.KeepAspect {
+			// 保持宽高比，计算最小缩放比例
+			scaleX := float64(options.Width) / float64(info.Width)
+			scaleY := float64(options.Height) / float64(info.Height)
+
+			if scaleX > 0 && scaleY > 0 {
+				scale = scaleX
+				if scaleY < scaleX {
+					scale = scaleY
+				}
+			} else if scaleX > 0 {
+				scale = scaleX
+			} else if scaleY > 0 {
+				scale = scaleY
+			} else {
+				return fmt.Errorf("invalid resize dimensions")
+			}
+		} else {
+			// 直接使用指定的宽高（可能会变形）
+			if options.Width > 0 && options.Height > 0 {
+				_ = float64(options.Width) / float64(info.Width)
+				_ = float64(options.Height) / float64(info.Height)
+				// 使用 thumbnail 命令可以指定具体尺寸
+				args = []string{"thumbnail", inputPath, outputPath,
+					fmt.Sprintf("%dx%d!", options.Width, options.Height)}
+			} else {
+				return fmt.Errorf("width and height must be specified when not keeping aspect ratio")
+			}
+		}
+
+		if len(args) == 0 {
+			// 检查是否需要防止放大
+			if options.NoEnlarge && scale > 1.0 {
+				scale = 1.0
+			}
+			args = []string{"resize", inputPath, outputPath, strconv.FormatFloat(scale, 'f', 2, 64)}
+		}
+	}
+
+	result, err := utils.ExecuteCommand(ctx, utils.VipsPath, args...)
+	if err != nil {
+		return fmt.Errorf("vips resize failed: %w, stderr: %s", err, string(result.Stderr))
+	}
+
+	return nil
+}
+
+// CropVipsImage 裁剪图片
+func CropVipsImage(ctx context.Context, inputPath, outputPath string, width, height int, options *VipsCropOptions) error {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
+		return err
+	}
+
+	if width <= 0 || height <= 0 {
+		return fmt.Errorf("invalid crop dimensions: width and height must be positive")
+	}
+
+	if options == nil {
+		options = &VipsCropOptions{Position: VipsCropCenter}
+	}
+
+	var args []string
+
+	switch options.Position {
+	case VipsCropSmart:
+		// 智能裁剪，使用 smartcrop
+		args = []string{"smartcrop", inputPath, outputPath,
+			strconv.Itoa(width), strconv.Itoa(height)}
+	case VipsCropCustom:
+		// 自定义位置裁剪
+		args = []string{"crop", inputPath, outputPath,
+			strconv.Itoa(options.X), strconv.Itoa(options.Y),
+			strconv.Itoa(width), strconv.Itoa(height)}
+	default:
+		// 使用 thumbnail 进行位置裁剪
+		var gravity string
+		switch options.Position {
+		case VipsCropTop:
+			gravity = "attention" // top -> attention
+		case VipsCropBottom:
+			gravity = "low" // bottom -> low
+		default:
+			gravity = "centre"
+		}
+
+		args = []string{"thumbnail", inputPath, outputPath,
+			fmt.Sprintf("%dx%d^", width, height),
+			"--crop", gravity}
+
+	}
+
+	result, err := utils.ExecuteCommand(ctx, utils.VipsPath, args...)
+	if err != nil {
+		return fmt.Errorf("vips crop failed: %w, stderr: %s", err, string(result.Stderr))
+	}
+
+	return nil
+}
+
+// CompressVipsImage 综合压缩图片（删除EXIF，调整大小，质量压缩，格式转换）
+func CompressVipsImage(ctx context.Context, inputPath, outputPath string,
+	targetFormat consts.ImageFormat, targetWidth, targetHeight, quality int) error {
+
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
+		return err
+	}
+
+	if targetWidth <= 0 || targetHeight <= 0 {
+		return fmt.Errorf("invalid target dimensions: width and height must be positive")
+	}
+	if quality < 1 || quality > 100 {
+		return fmt.Errorf("invalid quality: must be between 1 and 100")
+	}
+
+	// 创建一个中间临时文件
+	ext := filepath.Ext(outputPath)
+	tmpOutput := strings.TrimSuffix(outputPath, ext) + ".tmp" + ext
+
+	// 第一步：缩略图处理（不带 strip）
+	argsThumb := []string{
+		"thumbnail", inputPath, tmpOutput,
+		fmt.Sprintf("%dx%d>", targetWidth, targetHeight),
+	}
+
+	if result, err := utils.ExecuteCommand(ctx, utils.VipsPath, argsThumb...); err != nil {
+		return fmt.Errorf("vips thumbnail failed: %w, stderr: %s", err, string(result.Stderr))
+	}
+
+	// 第二步：拷贝并压缩，带 strip 和质量设置
+	var argsCopy []string
+	switch targetFormat {
+	case consts.FormatJPG:
+		argsCopy = append(argsCopy, "jpegsave", tmpOutput, outputPath)
+		if quality > 0 {
+			argsCopy = append(argsCopy, "--Q", strconv.Itoa(quality))
+		}
+		argsCopy = append(argsCopy, "--strip")
+
+	case consts.FormatPNG:
+		argsCopy = append(argsCopy, "pngsave", tmpOutput, outputPath)
+		compression := 9 - (quality-1)*9/99
+		argsCopy = append(argsCopy, "--compression", strconv.Itoa(compression))
+		argsCopy = append(argsCopy, "--strip")
+
+	case consts.FormatWEBP:
+		argsCopy = append(argsCopy, "webpsave", tmpOutput, outputPath)
+		if quality > 0 {
+			argsCopy = append(argsCopy, "--Q", strconv.Itoa(quality))
+		}
+		argsCopy = append(argsCopy, "--strip")
+
+	default:
+		return fmt.Errorf("unsupported target format: %s", targetFormat)
+	}
+
+	if result, err := utils.ExecuteCommand(ctx, utils.VipsPath, argsCopy...); err != nil {
+		return fmt.Errorf("vips copy failed: %w, stderr: %s", err, string(result.Stderr))
+	}
+
+	// 可选：删除中间文件（如果你没有自动管理临时文件）
+	_ = os.Remove(tmpOutput)
+
+	return nil
+}
+
+// StripVipsImageMeta 删除图片元数据
+func StripVipsImageMeta(ctx context.Context, inputPath, outputPath string) error {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
+		return err
+	}
+
+	ext := strings.ToLower(filepath.Ext(outputPath))
+
+	var args []string
+	switch ext {
+	case ".jpg", ".jpeg":
+		args = []string{"jpegsave", inputPath, outputPath, "--strip"}
+	case ".png":
+		args = []string{"pngsave", inputPath, outputPath, "--strip"}
+	case ".webp":
+		args = []string{"webpsave", inputPath, outputPath, "--strip"}
+	default:
+		return fmt.Errorf("unsupported output format for stripping metadata: %s", ext)
+	}
+
+	result, err := utils.ExecuteCommand(ctx, utils.VipsPath, args...)
+	if err != nil {
+		return fmt.Errorf("vips strip meta failed: %w, stderr: %s", err, string(result.Stderr))
+	}
+
+	return nil
+}
+
+// IsVipsAvailable 检查 VIPS 是否可用
 func IsVipsAvailable() bool {
-	if err := utils.EnsureInitialized(); err != nil {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
 		return false
 	}
 	return utils.VipsPath != ""
 }
 
-// buildVipsArgs 构建vips命令参数
-func buildVipsArgs(inputPath, outputPath string, options *ProcessOptions) []string {
-	args := []string{"thumbnail"}
-
-	// 输入文件
-	args = append(args, inputPath)
-
-	// 输出文件
-	args = append(args, outputPath)
-
-	// 尺寸参数
-	if options.Width > 0 && options.Height > 0 {
-		if options.Crop {
-			// 裁剪模式：填充指定尺寸
-			args = append(args, fmt.Sprintf("%dx%d^", options.Width, options.Height))
-			args = append(args, "--crop", "centre")
-		} else {
-			// 适应模式：保持比例
-			args = append(args, fmt.Sprintf("%dx%d", options.Width, options.Height))
-		}
-	} else if options.Width > 0 {
-		args = append(args, strconv.Itoa(options.Width))
-	} else if options.Height > 0 {
-		args = append(args, fmt.Sprintf("x%d", options.Height))
-	} else {
-		// 使用MaxSize（最长边）
-		args = append(args, strconv.Itoa(options.MaxSize))
+// VipsVersion 获取 VIPS 版本信息
+func VipsVersion(ctx context.Context) (string, error) {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
+		return "", err
 	}
 
-	// 质量设置
-	if options.Quality > 0 && options.Quality <= 100 {
-		args = append(args, "--quality", strconv.Itoa(options.Quality))
+	result, err := utils.ExecuteCommand(ctx, utils.VipsPath, "--version")
+	if err != nil {
+		return "", fmt.Errorf("failed to get vips version: %w", err)
 	}
 
-	// 格式转换
-	if options.Format != "" {
-		args = append(args, "--format", options.Format)
-	}
+	return strings.TrimSpace(string(result.Stdout)), nil
+}
 
-	// 移除元数据
-	if options.Strip {
-		args = append(args, "--strip")
-	}
+// 快捷函数
 
-	// 渐进式JPEG
-	if options.Interlace {
-		args = append(args, "--interlace")
+// QuickConvertPNGToJPEG 快速将PNG转换为JPEG
+func QuickConvertPNGToJPEG(ctx context.Context, inputPath, outputPath string, quality int) error {
+	options := &VipsConvertOptions{
+		Quality:   quality,
+		StripMeta: true,
 	}
+	return ConvertVipsImage(ctx, inputPath, outputPath, consts.FormatJPG, options)
+}
 
-	// 优化
-	if options.Optimize {
-		args = append(args, "--optimize")
+// QuickConvertJPEGToPNG 快速将JPEG转换为PNG
+func QuickConvertJPEGToPNG(ctx context.Context, inputPath, outputPath string) error {
+	options := &VipsConvertOptions{
+		StripMeta: true,
 	}
+	return ConvertVipsImage(ctx, inputPath, outputPath, consts.FormatPNG, options)
+}
 
-	// 背景色
-	if options.Background != "" {
-		args = append(args, "--background", options.Background)
+// QuickConvertToWEBP 快速转换为WEBP格式
+func QuickConvertToWEBP(ctx context.Context, inputPath, outputPath string, quality int, lossless bool) error {
+	options := &VipsConvertOptions{
+		Quality:   quality,
+		StripMeta: true,
+		Lossless:  lossless,
 	}
+	return ConvertVipsImage(ctx, inputPath, outputPath, consts.FormatWEBP, options)
+}
 
-	// 锐化
-	if options.Sharpen {
-		args = append(args, "--sharpen", "1")
+// QuickResizeKeepAspect 快速等比例调整大小
+func QuickResizeKeepAspect(ctx context.Context, inputPath, outputPath string, maxWidth, maxHeight int) error {
+	options := &VipsResizeOptions{
+		Width:      maxWidth,
+		Height:     maxHeight,
+		KeepAspect: true,
+		NoEnlarge:  true,
 	}
+	return ResizeVipsImage(ctx, inputPath, outputPath, options)
+}
 
-	// 自动旋转
-	if options.AutoRotate {
-		args = append(args, "--auto-rotate")
+// QuickCropCenter 快速居中裁剪
+func QuickCropCenter(ctx context.Context, inputPath, outputPath string, width, height int) error {
+	options := &VipsCropOptions{
+		Position: VipsCropCenter,
 	}
+	return CropVipsImage(ctx, inputPath, outputPath, width, height, options)
+}
 
-	// WebP特定选项
-	if strings.ToLower(options.Format) == "webp" {
-		if options.WebPLossless {
-			args = append(args, "--webp-lossless")
-		}
-		if options.WebPEffort >= 0 && options.WebPEffort <= 6 {
-			args = append(args, "--webp-effort", strconv.Itoa(options.WebPEffort))
-		}
+// QuickSmartCrop 快速智能裁剪
+func QuickSmartCrop(ctx context.Context, inputPath, outputPath string, width, height int) error {
+	options := &VipsCropOptions{
+		Position: VipsCropSmart,
 	}
-
-	return args
+	return CropVipsImage(ctx, inputPath, outputPath, width, height, options)
 }
