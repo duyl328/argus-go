@@ -3,7 +3,6 @@ package main
 import (
 	"archive/zip"
 	"context"
-	"embed"
 	"errors"
 	"fmt"
 	"go.uber.org/zap"
@@ -31,9 +30,6 @@ import (
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 )
-
-//go:embed tools/windows_amd64/exiftool/*
-var exiftoolFS embed.FS
 
 func main() {
 	// 基础配置加载
