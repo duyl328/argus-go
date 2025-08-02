@@ -1,11 +1,13 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
 	"embed"
 	"errors"
 	"fmt"
 	"go.uber.org/zap"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -20,6 +22,7 @@ import (
 	"rear/internal/utils"
 	"rear/pkg/logger"
 	utilsPkg "rear/pkg/utils"
+	"strings"
 	"syscall"
 	"time"
 
@@ -51,6 +54,15 @@ func main() {
 	if err != nil {
 		// log.Fatal 会输出错误信息并调用 os.Exit(1)
 		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+
+	// 初始化工具依赖（仅在开发阶段）
+	if config.IsDevelopment() {
+		err = initializeToolDependencies()
+		if err != nil {
+			logger.Warnf("Failed to initialize tool dependencies: %v", err)
+			logger.Warn("继续运行但某些功能可能受限")
+		}
 	}
 
 	// 初始化工具路径
@@ -94,30 +106,6 @@ func main() {
 
 	// 创建软件所需的缓存目录等内容
 	createCachePath(config.CONFIG.AppDir)
-
-	// 将 CLI 放到到运行目录
-	join := filepath.Join(config.CONFIG.AppDir, "tools", "exiftool")
-	srcDir := `.\tools\windows_amd64\exiftool\exiftool` // 源目录
-
-	// 复制整个目录
-	if err := utilsPkg.FileUtils.CopyDir(srcDir, join); err != nil {
-		fmt.Printf("复制失败: %v\n", err)
-		return
-	}
-
-	join1 := filepath.Join(config.CONFIG.AppDir, "tools", "vips")
-	srcDir1 := `.\tools\windows_amd64\libvips\vips` // 源目录
-	if err := utilsPkg.FileUtils.CopyDir(srcDir1, join1); err != nil {
-		fmt.Printf("复制失败: %v\n", err)
-		return
-	}
-
-	join2 := filepath.Join(config.CONFIG.AppDir, "tools", "imagemagick")
-	srcDir2 := `.\tools\windows_amd64\imagemagick\imagemagick` // 源目录
-	if err := utilsPkg.FileUtils.CopyDir(srcDir2, join2); err != nil {
-		fmt.Printf("复制失败: %v\n", err)
-		return
-	}
 
 	//if err := initDatabase(); err != nil {
 	//	logger.Fatalf("Failed to initialize database: %v", err)
@@ -282,4 +270,186 @@ func startHttp(con *container.DbContainer, imgContain *container.TaskContainer) 
 	}
 
 	logger.Info("Server exited")
+}
+
+// initializeToolDependencies 初始化工具依赖（仅在开发阶段）
+func initializeToolDependencies() error {
+	logger.Info("开始初始化工具依赖...")
+
+	// 定义需要处理的工具
+	tools := []string{"exiftool", "imagemagick", "libvips"}
+
+	for _, tool := range tools {
+		if err := extractToolFromZip(tool); err != nil {
+			return fmt.Errorf("初始化工具 %s 失败: %v", tool, err)
+		}
+	}
+
+	logger.Info("工具依赖初始化完成")
+	return nil
+}
+
+// extractToolFromZip 从压缩包中解压工具到构建目录
+func extractToolFromZip(toolName string) error {
+	logger.Infof("处理工具: %s", toolName)
+
+	// 源压缩包目录
+	sourceDir := filepath.Join("tools", toolName)
+
+	// 目标解压目录
+	targetDir := filepath.Join(config.CONFIG.AppDir, "tools", toolName)
+
+	// 检查目标目录是否已存在且内容完整
+	if isToolReady(targetDir, toolName) {
+		logger.Infof("工具 %s 已存在且完整，跳过解压", toolName)
+		return nil
+	}
+
+	// 选择合适的压缩包
+	zipFile, err := selectZipFile(sourceDir, toolName)
+	if err != nil {
+		return fmt.Errorf("选择压缩包失败: %v", err)
+	}
+
+	logger.Infof("使用压缩包: %s", zipFile)
+
+	// 解压压缩包
+	if err := extractZip(zipFile, targetDir); err != nil {
+		return fmt.Errorf("解压失败: %v", err)
+	}
+
+	logger.Infof("工具 %s 解压完成", toolName)
+	return nil
+}
+
+// selectZipFile 选择合适的压缩包文件
+func selectZipFile(sourceDir, toolName string) (string, error) {
+	// 扫描目录中的zip文件
+	zipFiles, err := filepath.Glob(filepath.Join(sourceDir, "*.zip"))
+	if err != nil {
+		return "", fmt.Errorf("扫描zip文件失败: %v", err)
+	}
+
+	if len(zipFiles) == 0 {
+		return "", fmt.Errorf("在目录 %s 中未找到zip文件", sourceDir)
+	}
+
+	if len(zipFiles) == 1 {
+		// 只有一个zip文件，直接使用
+		return zipFiles[0], nil
+	}
+
+	// 多个zip文件的情况，查找默认名称的文件
+	defaultZip := filepath.Join(sourceDir, toolName+".zip")
+	for _, zipFile := range zipFiles {
+		if zipFile == defaultZip {
+			return zipFile, nil
+		}
+	}
+
+	// 如果没有找到默认名称的文件，报错
+	return "", fmt.Errorf("发现多个zip文件但未找到默认文件 %s.zip，请确保存在默认压缩包", toolName)
+}
+
+// isToolReady 检查工具是否已准备就绪（目录存在且有内容）
+func isToolReady(targetDir, toolName string) bool {
+	// 检查目录是否存在
+	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
+		return false
+	}
+
+	// 检查目录是否为空
+	entries, err := os.ReadDir(targetDir)
+	if err != nil || len(entries) == 0 {
+		return false
+	}
+
+	// 根据不同工具检查关键文件是否存在
+	switch toolName {
+	case "exiftool":
+		return fileExists(filepath.Join(targetDir, "exiftool(-k).exe")) ||
+			fileExists(filepath.Join(targetDir, "exiftool.exe"))
+	case "imagemagick":
+		return fileExists(filepath.Join(targetDir, "magick.exe"))
+	case "libvips":
+		return dirExists(filepath.Join(targetDir, "bin"))
+	default:
+		return true // 对于未知工具，只要有内容就认为准备就绪
+	}
+}
+
+// fileExists 检查文件是否存在
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	return err == nil && !info.IsDir()
+}
+
+// dirExists 检查目录是否存在
+func dirExists(dirname string) bool {
+	info, err := os.Stat(dirname)
+	return err == nil && info.IsDir()
+}
+
+// extractZip 解压zip文件到指定目录
+func extractZip(src, dest string) error {
+	// 创建目标目录
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		return fmt.Errorf("创建目标目录失败: %v", err)
+	}
+
+	// 打开zip文件
+	r, err := zip.OpenReader(src)
+	if err != nil {
+		return fmt.Errorf("打开zip文件失败: %v", err)
+	}
+	defer r.Close()
+
+	// 解压每个文件
+	for _, f := range r.File {
+		err := extractFile(f, dest)
+		if err != nil {
+			return fmt.Errorf("解压文件 %s 失败: %v", f.Name, err)
+		}
+	}
+
+	return nil
+}
+
+// extractFile 解压单个文件
+func extractFile(f *zip.File, destDir string) error {
+	// 构建完整的目标路径
+	path := filepath.Join(destDir, f.Name)
+
+	// 确保路径安全（防止zip slip攻击）
+	if !strings.HasPrefix(path, filepath.Clean(destDir)+string(os.PathSeparator)) {
+		return fmt.Errorf("无效的文件路径: %s", f.Name)
+	}
+
+	if f.FileInfo().IsDir() {
+		// 创建目录
+		return os.MkdirAll(path, f.FileInfo().Mode())
+	}
+
+	// 创建父目录
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+
+	// 打开zip中的文件
+	rc, err := f.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+
+	// 创建目标文件
+	outFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.FileInfo().Mode())
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	// 复制文件内容
+	_, err = io.Copy(outFile, rc)
+	return err
 }
