@@ -1,0 +1,89 @@
+# Argus 项目配置文件
+# 这是一个示例配置文件，展示了所有可配置的选项
+# 如果某个配置项为空或未设置，将使用默认值
+
+# 应用程序配置
+app:
+  # 服务端口 (默认: 8080)
+  port: "8080"
+  # 运行模式: debug, release, test (默认: debug)
+  mode: "debug"
+  # 读取超时时间 (默认: 30s)
+  read_timeout: 30s
+  # 写入超时时间 (默认: 30s)
+  write_timeout: 30s
+  # 空闲超时时间 (默认: 60s)
+  idle_timeout: 60s
+  # 开发阶段标识 (可选)
+  # 如果设置为 true，表示开发阶段，某些开发专用代码会执行
+  # 如果设置为 false 或不设置，表示生产阶段
+  development: true
+
+# 工具路径配置
+# 如果留空，系统会自动检测工具路径
+tools:
+  # ExifTool 可执行文件路径
+  exiftool_path: ""
+  # ImageMagick 可执行文件路径 (magick 或 convert)
+  imagemagick_path: ""
+  # LibVips 可执行文件路径
+  libvips_path: ""
+
+# 目录路径配置
+paths:
+  # 缓存目录名称 (默认: cache)
+  cache_path: "cache"
+  # 缩略图目录名称 (默认: thumbnail)
+  thumbnail_path: "thumbnail"
+  # 日志目录名称 (默认: app-logs)
+  log_path: "app-logs"
+  # 临时文件目录名称 (默认: app-tmp)
+  temp_path: "app-tmp"
+  # PNG临时文件目录名称 (默认: png-tmp)
+  png_temp_path: "png-tmp"
+
+# 日志配置
+logging:
+  # 日志级别: debug, info, warn, error (默认: info)
+  level: "info"
+  # 自定义日志文件路径 (如果为空，使用 paths.log_path)
+  file_path: ""
+
+# 数据库配置
+database:
+  # 数据库类型: sqlite, mysql (默认: sqlite)
+  type: "sqlite"
+  # SQLite 数据库文件路径 (默认: test.db)
+  path: "test.db"
+  
+  # MySQL 配置 (仅当 type 为 mysql 时生效)
+  host: "localhost"
+  port: "3306"
+  database: "argus"
+  username: ""
+  password: ""
+  
+  # 连接池配置
+  max_idle_conns: 1
+  max_open_conns: 1
+  max_lifetime: 0
+
+# 图像处理配置
+image:
+  # 缩略图格式: jpg, png, webp (默认: jpg)
+  thumbnail_format: "jpg"
+  # 缩略图尺寸 [宽度, 高度] (默认: [512, 720])
+  thumbnail_size: [512, 720]
+  # 缩略图质量 1-100 (默认: 80)
+  thumbnail_quality: 80
+  # 屏幕大小 (默认: 1080)
+  screen_size: 1080
+  
+  # 支持的文件格式
+  supported_formats:
+    # 基础格式 (ImageMagick, libvips 支持)
+    base: [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"]
+    # 特殊格式
+    special: [".gif", ".heic", ".heif", ".webp", ".avif", ".jxl"]
+    # 缩略图格式
+    thumbnail: [".jpg", ".webp"]

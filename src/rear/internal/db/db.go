@@ -265,14 +265,8 @@ func InitDatabase() error {
 }
 
 func getDatabaseConfig() config.DatabaseConfig {
-	// 初始化数据库
-	return config.DatabaseConfig{
-		Type:         config.SQLite,
-		Database:     "test.db",
-		MaxIdleConns: 1,
-		MaxOpenConns: 1,
-		MaxLifetime:  0,
-	}
+	// 使用配置文件中的数据库配置
+	return config.GetDatabaseConfig()
 }
 
 var DB *gorm.DB

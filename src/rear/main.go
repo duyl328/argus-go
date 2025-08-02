@@ -17,8 +17,9 @@ import (
 	"rear/internal/repositories"
 	"rear/internal/router"
 	"rear/internal/service"
+	"rear/internal/utils"
 	"rear/pkg/logger"
-	"rear/pkg/utils"
+	utilsPkg "rear/pkg/utils"
 	"syscall"
 	"time"
 
@@ -42,10 +43,35 @@ func main() {
 	}
 	logConfig := logger.DefaultConfig()
 	logConfig.LogPath = logPath
+	// 使用配置文件中的日志级别
+	if config.CONFIG.LoggingConfig.Level != "" {
+		logConfig.Level = parseLogLevel(config.CONFIG.LoggingConfig.Level)
+	}
 	err = logger.InitDefaultLogger(logConfig)
 	if err != nil {
 		// log.Fatal 会输出错误信息并调用 os.Exit(1)
 		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+
+	// 初始化工具路径
+	err = initializeTools()
+	if err != nil {
+		logger.Warnf("Failed to initialize tools: %v", err)
+		logger.Warn("继续运行但某些功能可能受限")
+	}
+
+	// 输出工具版本信息
+	printToolsInfo()
+
+	// 根据开发阶段执行不同的逻辑
+	if config.IsDevelopment() {
+		logger.Info("运行在开发模式")
+		// 开发阶段特有的初始化代码
+		initDevelopmentFeatures()
+	} else {
+		logger.Info("运行在生产模式")
+		// 生产阶段的优化设置
+		initProductionOptimizations()
 	}
 
 	// 数据库初始化
@@ -74,21 +100,21 @@ func main() {
 	srcDir := `.\tools\windows_amd64\exiftool\exiftool` // 源目录
 
 	// 复制整个目录
-	if err := utils.FileUtils.CopyDir(srcDir, join); err != nil {
+	if err := utilsPkg.FileUtils.CopyDir(srcDir, join); err != nil {
 		fmt.Printf("复制失败: %v\n", err)
 		return
 	}
 
 	join1 := filepath.Join(config.CONFIG.AppDir, "tools", "vips")
 	srcDir1 := `.\tools\windows_amd64\libvips\vips` // 源目录
-	if err := utils.FileUtils.CopyDir(srcDir1, join1); err != nil {
+	if err := utilsPkg.FileUtils.CopyDir(srcDir1, join1); err != nil {
 		fmt.Printf("复制失败: %v\n", err)
 		return
 	}
 
 	join2 := filepath.Join(config.CONFIG.AppDir, "tools", "imagemagick")
 	srcDir2 := `.\tools\windows_amd64\imagemagick\imagemagick` // 源目录
-	if err := utils.FileUtils.CopyDir(srcDir2, join2); err != nil {
+	if err := utilsPkg.FileUtils.CopyDir(srcDir2, join2); err != nil {
 		fmt.Printf("复制失败: %v\n", err)
 		return
 	}
@@ -102,29 +128,91 @@ func main() {
 	startHttp(newContainer, newTaskContainer)
 }
 
+// parseLogLevel 将字符串转换为LogLevel
+func parseLogLevel(level string) logger.LogLevel {
+	switch level {
+	case "debug":
+		return logger.DebugLevel
+	case "info":
+		return logger.InfoLevel
+	case "warn", "warning":
+		return logger.WarnLevel
+	case "error":
+		return logger.ErrorLevel
+	case "fatal":
+		return logger.FatalLevel
+	default:
+		return logger.InfoLevel
+	}
+}
+
 // 获取日志路径
 func getLogPath() (error, string) {
-	join := filepath.Join(config.CONFIG.AppDir, config.CONFIG.PathConfig.LogPath)
-	err := utils.FileUtils.CreateDir(join)
+	var logPath string
+	// 如果配置文件中指定了日志文件路径，使用配置的路径
+	if config.CONFIG.LoggingConfig.FilePath != "" {
+		logPath = config.CONFIG.LoggingConfig.FilePath
+		// 如果是相对路径，转换为绝对路径
+		if !filepath.IsAbs(logPath) {
+			logPath = filepath.Join(config.CONFIG.AppDir, logPath)
+		}
+	} else {
+		// 使用默认路径
+		logPath = filepath.Join(config.CONFIG.AppDir, config.CONFIG.PathConfig.LogPath)
+	}
+	err := utilsPkg.FileUtils.CreateDir(logPath)
 	if err != nil {
-		logger.Error("日志文件夹创建失败！", zap.String("path", join), zap.Error(err))
+		logger.Error("日志文件夹创建失败！", zap.String("path", logPath), zap.Error(err))
 		return err, ""
 	}
-	return nil, join
+	return nil, logPath
+}
+
+// initDevelopmentFeatures 初始化开发阶段功能
+func initDevelopmentFeatures() {
+	logger.Info("启用开发模式功能")
+}
+
+// initProductionOptimizations 初始化生产阶段优化
+func initProductionOptimizations() {
+	logger.Info("启用生产模式优化")
+}
+
+// initializeTools 初始化工具
+func initializeTools() error {
+	// 使用新的配置初始化方法
+	return utils.InitializeFromConfig(&config.CONFIG.AppDir)
+}
+
+// printToolsInfo 输出工具版本信息
+func printToolsInfo() {
+	logger.Info("=== 工具信息 ===")
+
+	tools := utils.GetToolsInfo()
+	for _, tool := range tools {
+		if tool.Error != nil {
+			logger.Warnf("%-12s: %s (路径: %s)", tool.Name, tool.Error.Error(), tool.Path)
+		} else {
+			logger.Infof("%-12s: %s", tool.Name, tool.Version)
+			logger.Infof("%-12s  路径: %s", "", tool.Path)
+		}
+	}
+
+	logger.Info("================")
 }
 
 // 创建软件所需的缓存目录等内容
 func createCachePath(dir string) {
 	// 缩略图目录
 	thumbnailPath := filepath.Join(dir, config.CONFIG.PathConfig.CachePath, config.CONFIG.PathConfig.ThumbnailPath)
-	err := utils.FileUtils.CreateDir(thumbnailPath)
+	err := utilsPkg.FileUtils.CreateDir(thumbnailPath)
 	if err != nil {
 		logger.Error("缩略图路径创建失败！", zap.String("path", dir), zap.Error(err))
 		return
 	}
 	// 临时文件路径
 	tempPath := filepath.Join(dir, config.CONFIG.PathConfig.TempPath, config.CONFIG.PathConfig.PngTempPath)
-	err = utils.FileUtils.CreateDir(tempPath)
+	err = utilsPkg.FileUtils.CreateDir(tempPath)
 	if err != nil {
 		logger.Error("临时文件夹创建失败！", zap.String("path", dir), zap.Error(err))
 		return
