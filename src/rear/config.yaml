@@ -14,7 +14,7 @@ app:
 #   libvips_path: "C:/tools/vips/bin/vips.exe"
 
 logging:
-  level: "info"
+  level: "debug"
 
 database:
   type: "sqlite"

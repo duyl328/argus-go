@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"rear/internal/consts"
 	"rear/pkg/logger"
+	"runtime"
 	"time"
 )
 
@@ -63,6 +64,7 @@ type Config struct {
 	// 新增配置字段
 	ToolsConfig   ToolsConfig
 	LoggingConfig LoggingConfig
+	TaskConfig    TaskConfig  // 任务处理配置
 	FileConfig    *FileConfig // 原始配置文件内容
 }
 
@@ -129,6 +131,7 @@ func InitConfig() *Config {
 		AppDir:                    execDir,
 		ToolsConfig:               fileConfig.Tools,
 		LoggingConfig:             fileConfig.Logging,
+		TaskConfig:                fileConfig.Task,
 		FileConfig:                fileConfig,
 	}
 	return &CONFIG
@@ -212,4 +215,53 @@ func IsDevelopment() bool {
 // IsProduction 判断是否为生产阶段
 func IsProduction() bool {
 	return !IsDevelopment()
+}
+
+// GetTaskConfig 获取优化后的任务配置
+func GetTaskConfig() TaskConfig {
+	taskConfig := CONFIG.TaskConfig
+
+	// 如果并发数为0，自动设置为CPU核心数
+	if taskConfig.Concurrency == 0 {
+		taskConfig.Concurrency = runtime.NumCPU()
+	}
+
+	// 如果最大并发数为0，设置为CPU核心数*2
+	if taskConfig.MaxConcurrency == 0 {
+		taskConfig.MaxConcurrency = runtime.NumCPU() * 2
+	}
+
+	// 确保最小并发数至少为1
+	if taskConfig.MinConcurrency == 0 {
+		taskConfig.MinConcurrency = 1
+	}
+
+	// 确保并发数在合理范围内
+	if taskConfig.Concurrency < taskConfig.MinConcurrency {
+		taskConfig.Concurrency = taskConfig.MinConcurrency
+	}
+	if taskConfig.Concurrency > taskConfig.MaxConcurrency {
+		taskConfig.Concurrency = taskConfig.MaxConcurrency
+	}
+
+	// 如果队列容量为0，设置默认值
+	if taskConfig.QueueCapacity == 0 {
+		taskConfig.QueueCapacity = 1000
+	}
+
+	// 如果监控间隔为0，设置默认值
+	if taskConfig.MonitorInterval == 0 {
+		taskConfig.MonitorInterval = 10
+	}
+
+	logger.Info("任务配置已优化",
+		zap.Int("concurrency", taskConfig.Concurrency),
+		zap.Int("max_concurrency", taskConfig.MaxConcurrency),
+		zap.Int("min_concurrency", taskConfig.MinConcurrency),
+		zap.Int("queue_capacity", taskConfig.QueueCapacity),
+		zap.Int("monitor_interval", taskConfig.MonitorInterval),
+		zap.Bool("auto_adjust", taskConfig.AutoAdjust),
+		zap.Bool("auto_start", taskConfig.AutoStart))
+
+	return taskConfig
 }

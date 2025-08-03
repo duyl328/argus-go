@@ -63,6 +63,24 @@ type ImageConfig struct {
 	} `yaml:"supported_formats" json:"supported_formats"`
 }
 
+// TaskConfig 任务处理配置
+type TaskConfig struct {
+	// 并发工作协程数量，0表示自动检测（CPU核心数）
+	Concurrency int `yaml:"concurrency" json:"concurrency"`
+	// 任务队列最大容量
+	QueueCapacity int `yaml:"queue_capacity" json:"queue_capacity"`
+	// 是否启用自动调整并发数
+	AutoAdjust bool `yaml:"auto_adjust" json:"auto_adjust"`
+	// 系统监控间隔（秒）
+	MonitorInterval int `yaml:"monitor_interval" json:"monitor_interval"`
+	// 最大并发数限制（防止系统过载）
+	MaxConcurrency int `yaml:"max_concurrency" json:"max_concurrency"`
+	// 最小并发数限制
+	MinConcurrency int `yaml:"min_concurrency" json:"min_concurrency"`
+	// 是否在启动时自动开始任务管理器
+	AutoStart bool `yaml:"auto_start" json:"auto_start"`
+}
+
 // FileConfig 完整的配置文件结构
 type FileConfig struct {
 	App      AppConfig      `yaml:"app" json:"app"`
@@ -71,6 +89,7 @@ type FileConfig struct {
 	Logging  LoggingConfig  `yaml:"logging" json:"logging"`
 	Database DatabaseConfig `yaml:"database" json:"database"`
 	Image    ImageConfig    `yaml:"image" json:"image"`
+	Task     TaskConfig     `yaml:"task" json:"task"`
 }
 
 // LoadConfigFromFile 从文件加载配置
@@ -149,6 +168,15 @@ func GetDefaultFileConfig() *FileConfig {
 				Special:   []string{".gif", ".heic", ".heif", ".webp", ".avif", ".jxl"},
 				Thumbnail: []string{".jpg", ".webp"},
 			},
+		},
+		Task: TaskConfig{
+			Concurrency:     0,    // 0表示自动检测CPU核心数
+			QueueCapacity:   1000, // 任务队列容量
+			AutoAdjust:      true, // 启用自动调整
+			MonitorInterval: 10,   // 10秒监控间隔
+			MaxConcurrency:  0,    // 0表示CPU核心数*2
+			MinConcurrency:  1,    // 最少1个并发
+			AutoStart:       true, // 启动时自动开始
 		},
 	}
 }
@@ -268,6 +296,19 @@ func MergeWithDefaults(fileConfig *FileConfig) *FileConfig {
 	if len(fileConfig.Image.SupportedFormats.Thumbnail) == 0 {
 		fileConfig.Image.SupportedFormats.Thumbnail = defaultConfig.Image.SupportedFormats.Thumbnail
 	}
+
+	// Task配置合并
+	if fileConfig.Task.QueueCapacity == 0 {
+		fileConfig.Task.QueueCapacity = defaultConfig.Task.QueueCapacity
+	}
+	if fileConfig.Task.MonitorInterval == 0 {
+		fileConfig.Task.MonitorInterval = defaultConfig.Task.MonitorInterval
+	}
+	if fileConfig.Task.MinConcurrency == 0 {
+		fileConfig.Task.MinConcurrency = defaultConfig.Task.MinConcurrency
+	}
+	// 注意：Concurrency、MaxConcurrency、AutoAdjust、AutoStart 为0或false时可能是用户有意设置的
+	// 所以这里不做默认值合并，而是在使用时进行处理
 
 	return fileConfig
 }

@@ -1,0 +1,70 @@
+# Argus 图像处理服务配置文件示例
+
+app:
+  port: "8080"
+  mode: "debug"  # debug 或 release
+  read_timeout: 30s
+  write_timeout: 30s
+  idle_timeout: 60s
+  development: true  # 开发模式
+
+# 任务处理配置
+task:
+  # 并发工作协程数量，0表示自动检测（CPU核心数）
+  concurrency: 0
+  # 任务队列最大容量
+  queue_capacity: 1000
+  # 是否启用自动调整并发数
+  auto_adjust: true
+  # 系统监控间隔（秒）
+  monitor_interval: 10
+  # 最大并发数限制（防止系统过载），0表示CPU核心数*2
+  max_concurrency: 0
+  # 最小并发数限制
+  min_concurrency: 1
+  # 是否在启动时自动开始任务管理器
+  auto_start: true
+
+# 工具路径配置
+tools:
+  exiftool_path: ""
+  imagemagick_path: ""
+  libvips_path: ""
+
+# 路径配置
+paths:
+  cache_path: "cache"
+  thumbnail_path: "thumbnail"
+  log_path: "app-logs"
+  temp_path: "app-tmp"
+  png_temp_path: "png-tmp"
+  database_path: "db"
+
+# 日志配置
+logging:
+  level: "info"  # debug, info, warn, error
+  file_path: ""
+
+# 数据库配置
+database:
+  type: "sqlite"  # sqlite 或 mysql
+  database: "argus"
+  host: "localhost"
+  port: "3306"
+  username: ""
+  password: ""
+  path: ""  # SQLite数据库文件路径，空表示使用默认位置
+  max_idle_conns: 1
+  max_open_conns: 1
+  max_lifetime: 0
+
+# 图像处理配置
+image:
+  thumbnail_format: "jpg"  # jpg 或 webp
+  thumbnail_size: [150, 300, 500, 800]  # 预生成的缩略图尺寸
+  thumbnail_quality: 80
+  screen_size: 1080
+  supported_formats:
+    base: [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"]
+    special: [".gif", ".heic", ".heif", ".webp", ".avif", ".jxl"]
+    thumbnail: [".jpg", ".webp"]
