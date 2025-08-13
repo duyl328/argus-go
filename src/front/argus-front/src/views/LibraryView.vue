@@ -267,7 +267,7 @@ onMounted(() => {
 
 .close-icon {
   cursor: pointer;
-  color: #666;
+  color: var(--text-color-secondary);
   transition: all 0.2s ease;
 }
 

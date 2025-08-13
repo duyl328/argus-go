@@ -21,7 +21,7 @@
 .page-title {
   font-size: 24px;
   font-weight: 600;
-  color: #333;
+  color: var(--text-color);
   margin: 0;
 }
 

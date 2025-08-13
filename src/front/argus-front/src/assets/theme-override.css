@@ -1,0 +1,138 @@
+/* Naive UI 全局主题覆盖 */
+
+/* 基础组件样式覆盖 */
+.n-card {
+  background-color: var(--card-bg) !important;
+  color: var(--text-color) !important;
+  border-color: var(--border-color) !important;
+}
+
+.n-button {
+  color: var(--text-color) !important;
+}
+
+.n-button--quaternary {
+  color: var(--text-color) !important;
+}
+
+.n-button--quaternary:hover {
+  background-color: var(--hover-bg) !important;
+}
+
+.n-input {
+  background-color: var(--bg-color-secondary) !important;
+  color: var(--text-color) !important;
+  border-color: var(--border-color) !important;
+}
+
+.n-input__input-el {
+  background-color: transparent !important;
+  color: var(--text-color) !important;
+}
+
+.n-input__placeholder {
+  color: var(--text-color-tertiary) !important;
+}
+
+/* 菜单组件样式覆盖 */
+.n-menu {
+  background-color: transparent !important;
+  color: var(--text-color) !important;
+}
+
+.n-menu-item {
+  color: var(--text-color) !important;
+}
+
+.n-menu-item:hover {
+  background-color: var(--hover-bg) !important;
+}
+
+.n-menu-item.n-menu-item--selected {
+  background-color: var(--hover-bg) !important;
+  color: var(--text-color) !important;
+}
+
+.n-menu-item-content {
+  color: inherit !important;
+}
+
+.n-menu-item-content__icon {
+  color: inherit !important;
+}
+
+/* 布局组件样式覆盖 */
+.n-layout {
+  background-color: var(--bg-color) !important;
+  color: var(--text-color) !important;
+}
+
+.n-layout-header {
+  background-color: var(--header-bg) !important;
+  color: var(--text-color) !important;
+  border-color: var(--border-color) !important;
+}
+
+.n-layout-sider {
+  background-color: var(--sidebar-bg) !important;
+  color: var(--text-color) !important;
+  border-color: var(--border-color) !important;
+}
+
+.n-layout-content {
+  background-color: var(--content-bg) !important;
+  color: var(--text-color) !important;
+}
+
+.n-layout-footer {
+  background-color: var(--bg-color) !important;
+  color: var(--text-color) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* 图标样式覆盖 */
+.n-icon {
+  color: inherit !important;
+}
+
+/* 滚动条样式覆盖 */
+.n-scrollbar-rail {
+  background-color: var(--bg-color-secondary) !important;
+}
+
+.n-scrollbar-rail__scrollbar {
+  background-color: var(--border-color) !important;
+}
+
+.n-scrollbar-rail__scrollbar:hover {
+  background-color: var(--text-color-secondary) !important;
+}
+
+/* 其他全局覆盖 */
+html.dark .n-base-selection,
+html.dark .n-base-selection-input {
+  background-color: var(--bg-color-secondary) !important;
+  color: var(--text-color) !important;
+  border-color: var(--border-color) !important;
+}
+
+html.dark .n-base-selection__border {
+  border-color: var(--border-color) !important;
+}
+
+html.dark .n-base-selection__state-border {
+  border-color: var(--border-color) !important;
+}
+
+/* 确保所有文本元素都继承主题颜色 */
+html.dark * {
+  border-color: var(--border-color);
+}
+
+html.dark h1, html.dark h2, html.dark h3, html.dark h4, html.dark h5, html.dark h6 {
+  color: var(--text-color) !important;
+}
+
+html.dark p, html.dark span, html.dark div:not([class*="n-"]) {
+  color: var(--text-color);
+}

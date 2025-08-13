@@ -1,15 +1,39 @@
-@import "base.css";
 @import "var.css";
-* {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  text-decoration: none;
-}
+@import "base.css";
+@import "theme-override.css";
+
 /* 禁止选中 */
 .no-select {
   user-select: none;
   -webkit-user-select: none;  /* Safari */
   -moz-user-select: none;     /* Firefox */
   -ms-user-select: none;      /* IE10+/Edge */
+}
+
+/* 全局容器样式，确保主题一致性 */
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* 确保所有文本元素都使用主题颜色 */
+h1, h2, h3, h4, h5, h6, p, span, div {
+  color: inherit;
+}
+
+/* 输入框样式适配 */
+input, textarea, select {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  border-color: var(--border-color);
+}
+
+/* 按钮基础样式适配 */
+button {
+  background-color: var(--bg-color-secondary);
+  color: var(--text-color);
+  border-color: var(--border-color);
 }

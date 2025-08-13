@@ -27,9 +27,9 @@
           </n-input>
         </div>
 
-        <!-- 右侧预留空间（可放用户信息等） -->
+        <!-- 右侧工具栏 -->
         <div class="header-right">
-          <!-- 可以添加用户头像、设置按钮等 -->
+          <ThemeToggle />
         </div>
       </div>
     </n-layout-header>
@@ -71,9 +71,11 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, watch, computed, h } from 'vue'
+import { ref, watch, computed, h, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NMenu, NIcon } from 'naive-ui'
+import ThemeToggle from '@/components/ThemeToggle.vue'
+import { useThemeStore } from '@/stores/theme'
 import {
   ImageOutline,
   SearchOutline,
@@ -91,6 +93,12 @@ import { menuOptions, type MenuOption, type MenuItem, type MenuGroup } from '@/t
 
 const router = useRouter()
 const route = useRoute()
+const themeStore = useThemeStore()
+
+// 初始化主题
+onMounted(() => {
+  themeStore.initTheme()
+})
 
 // 图标映射
 const iconMap = {
@@ -203,8 +211,9 @@ const handleMenuSelect = (key: string) => {
 .layout-header {
   height: var(--header-height);
   padding: 0;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 4px var(--shadow-color);
   z-index: 10;
+  background-color: var(--header-bg);
 }
 
 .header-content {
@@ -242,7 +251,7 @@ const handleMenuSelect = (key: string) => {
 .site-title {
   font-size: 20px;
   font-weight: 600;
-  color: #333;
+  color: var(--text-color);
   white-space: nowrap;
 }
 
@@ -265,6 +274,7 @@ const handleMenuSelect = (key: string) => {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  gap: 12px;
 }
 
 .layout-body {
@@ -274,8 +284,9 @@ const handleMenuSelect = (key: string) => {
 
 .layout-sider {
   height: 100%;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
+  box-shadow: 2px 0 8px var(--shadow-color);
   margin-left: 7px;
+  background-color: var(--sidebar-bg);
 }
 
 .sidebar-menu {
@@ -287,7 +298,7 @@ const handleMenuSelect = (key: string) => {
   height: 100%;
   overflow: auto;
   flex: 1;
-  background-color: #f5f5f5;
+  background-color: var(--content-bg);
 }
 
 .content-wrapper {
@@ -299,11 +310,11 @@ const handleMenuSelect = (key: string) => {
 
 .content-wrapper h1 {
   margin: 0 0 16px 0;
-  color: #333;
+  color: var(--text-color);
 }
 
 .content-wrapper p {
-  color: #666;
+  color: var(--text-color-secondary);
   line-height: 1.6;
 }
 
@@ -334,5 +345,58 @@ const handleMenuSelect = (key: string) => {
   .search-input {
     max-width: 200px;
   }
+}
+
+/* Naive UI 组件主题深度适配 */
+:deep(.n-layout) {
+  background-color: var(--bg-color) !important;
+  color: var(--text-color) !important;
+}
+
+:deep(.n-layout-header) {
+  background-color: var(--header-bg) !important;
+  color: var(--text-color) !important;
+}
+
+:deep(.n-layout-sider) {
+  background-color: var(--sidebar-bg) !important;
+  color: var(--text-color) !important;
+}
+
+:deep(.n-layout-content) {
+  background-color: var(--content-bg) !important;
+  color: var(--text-color) !important;
+}
+
+:deep(.n-menu) {
+  background-color: transparent !important;
+}
+
+:deep(.n-menu-item) {
+  color: var(--text-color) !important;
+}
+
+:deep(.n-menu-item:hover) {
+  background-color: var(--hover-bg) !important;
+}
+
+:deep(.n-menu-item.n-menu-item--selected) {
+  background-color: var(--hover-bg) !important;
+  color: var(--text-color) !important;
+}
+
+:deep(.n-input) {
+  background-color: var(--bg-color-secondary) !important;
+  color: var(--text-color) !important;
+  border-color: var(--border-color) !important;
+}
+
+:deep(.n-input__input-el) {
+  background-color: transparent !important;
+  color: var(--text-color) !important;
+}
+
+:deep(.n-input__placeholder) {
+  color: var(--text-color-tertiary) !important;
 }
 </style>

@@ -1,3 +1,42 @@
 :root {
   --header-height: 64px;
 }
+
+/* 浅色主题变量 */
+:root,
+html.light {
+  --bg-color: #ffffff;
+  --bg-color-secondary: #f5f5f5;
+  --bg-color-tertiary: #fafafa;
+  --text-color: #333333;
+  --text-color-secondary: #666666;
+  --text-color-tertiary: #999999;
+  --border-color: #e0e0e6;
+  --border-color-light: #f0f0f0;
+  --shadow-color: rgba(0, 0, 0, 0.08);
+  --shadow-color-light: rgba(0, 0, 0, 0.04);
+  --header-bg: #ffffff;
+  --sidebar-bg: #ffffff;
+  --content-bg: #f5f5f5;
+  --card-bg: #ffffff;
+  --hover-bg: rgba(0, 0, 0, 0.04);
+}
+
+/* 深色主题变量 */
+html.dark {
+  --bg-color: #1a1a1a;
+  --bg-color-secondary: #2d2d2d;
+  --bg-color-tertiary: #3a3a3a;
+  --text-color: #ffffff;
+  --text-color-secondary: #cccccc;
+  --text-color-tertiary: #999999;
+  --border-color: #3d3d3d;
+  --border-color-light: #4a4a4a;
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --shadow-color-light: rgba(0, 0, 0, 0.2);
+  --header-bg: #1a1a1a;
+  --sidebar-bg: #1a1a1a;
+  --content-bg: #2d2d2d;
+  --card-bg: #2d2d2d;
+  --hover-bg: rgba(255, 255, 255, 0.08);
+}
