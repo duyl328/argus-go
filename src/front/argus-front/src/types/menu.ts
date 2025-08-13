@@ -34,6 +34,12 @@ export const menuOptions: MenuOption[] = [
     icon: 'people-outline',
     path: '/people',
   },
+  {
+    key: 'field',
+    label: '文件夹',
+    icon: 'folder-outline',
+    path: '/field',
+  },
   // 媒体分组
   {
     key: 'media',

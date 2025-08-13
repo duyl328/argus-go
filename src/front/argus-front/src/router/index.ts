@@ -25,6 +25,12 @@ const router = createRouter({
       component: () => import('@/views/PeopleView.vue'),
       meta: { title: '人物' }
     },
+    {
+      path: '/field',
+      name: 'field',
+      component: () => import('@/views/FieldView.vue'),
+      meta: { title: '文件夹' }
+    },
 
     {
       path: '/library',
