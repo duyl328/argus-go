@@ -3,7 +3,7 @@ package repositories
 import (
 	"fmt"
 	"rear/internal/db"
-	"rear/internal/model"
+	"rear/internal/model/tables"
 	"rear/pkg/logger"
 )
 
@@ -13,8 +13,8 @@ func NewLibraryRepository() *LibraryRepository {
 	return &LibraryRepository{}
 }
 
-func (s *LibraryRepository) AddLibrary(lib *model.LibraryTable) error {
-	var result model.LibraryTable
+func (s *LibraryRepository) AddLibrary(lib *tables.LibraryTable) error {
+	var result tables.LibraryTable
 
 	err := db.GetDB().Where("img_path = ?", lib.ImgPath).FirstOrCreate(&result, lib).Error
 	if err != nil {
@@ -37,7 +37,7 @@ func (s *LibraryRepository) DeleteLibrary(imgPath string) error {
 	result := fmt.Sprintf("DeleteLibrary called with oldImgPath: %s", imgPath)
 	logger.Warn(result)
 	return ExecuteWrite(func() error {
-		return db.GetDB().Where("img_path = ?", imgPath).Delete(&model.LibraryTable{}).Error
+		return db.GetDB().Where("img_path = ?", imgPath).Delete(&tables.LibraryTable{}).Error
 	})
 }
 
@@ -55,12 +55,12 @@ func (s *LibraryRepository) UpdateLibrary(oldImgPath string, isEnable bool) erro
 	return ExecuteWrite(func() error {
 		return db.GetDB().Where("img_path = ?", oldImgPath).
 			Select("is_enable"). // 明确指定要更新的字段
-			Updates(&model.LibraryTable{IsEnable: isEnable}).Error
+			Updates(&tables.LibraryTable{IsEnable: isEnable}).Error
 	})
 }
 
-func (s *LibraryRepository) GetAllLibrary() ([]model.LibraryTable, error) {
-	var library []model.LibraryTable
+func (s *LibraryRepository) GetAllLibrary() ([]tables.LibraryTable, error) {
+	var library []tables.LibraryTable
 	err := ExecuteRead(func() error {
 		return db.GetDB().Find(&library).Error
 	})

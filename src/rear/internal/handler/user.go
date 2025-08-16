@@ -6,12 +6,13 @@ import (
 	"log"
 	"net/http"
 	"rear/internal/model"
+	"rear/internal/model/tables"
 	"rear/internal/repositories"
 )
 
 // 全局变量
 var (
-	Users      []model.User // 模拟数据存储
+	Users      []tables.User // 模拟数据存储
 	userNextID = 1
 )
 
@@ -59,7 +60,7 @@ func GetUserByID(c *gin.Context) {
 
 // InitSampleData 初始化示例数据
 func InitSampleData() {
-	Users = []model.User{
+	Users = []tables.User{
 		{Username: "John Doe", Email: "john@example.com"},
 		{Username: "Jane Smith", Email: "jane@example.com"},
 	}
@@ -72,7 +73,7 @@ func UpdateUser(c *gin.Context) {
 
 	for i, user := range Users {
 		if fmt.Sprintf("%d", user.ID) == id {
-			var updatedUser model.User
+			var updatedUser tables.User
 			if err := c.ShouldBindJSON(&updatedUser); err != nil {
 				c.JSON(http.StatusBadRequest, model.Response{
 					Code:    http.StatusBadRequest,
@@ -125,7 +126,7 @@ func GetUsers(c *gin.Context) {
 
 // CreateUser 创建用户
 func CreateUser(c *gin.Context) {
-	var user model.User
+	var user tables.User
 	if err := c.ShouldBindJSON(&user); err != nil {
 		c.JSON(http.StatusBadRequest, model.Response{
 			Code:    http.StatusBadRequest,

@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go mod:*)",
+      "Bash(go build -v .)",
+      "Bash(timeout:*)",
+      "Bash(go build:*)",
+      "Bash(ls:*)",
+      "Bash(go run:*)",
+      "Bash(del test_platform.go)",
+      "Bash(rm test_platform.go)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(go test:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": []
+  }
+}

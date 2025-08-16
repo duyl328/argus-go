@@ -8,6 +8,7 @@ import (
 	"rear/internal/config"
 	"rear/internal/container"
 	"rear/internal/model"
+	"rear/internal/model/tables"
 	"rear/pkg/logger"
 	"rear/pkg/utils"
 	"strings"
@@ -71,7 +72,7 @@ func (h *LibraryHandler) AddLibrary(c *gin.Context) {
 		return
 	}
 
-	library := &model.LibraryTable{
+	library := &tables.LibraryTable{
 		ImgPath:  path,
 		IsEnable: true,
 	}

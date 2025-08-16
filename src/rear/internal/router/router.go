@@ -18,6 +18,8 @@ func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *cont
 	// 资料库处理
 	libraryHandler := handler.NewLibraryHandler(contain, imgContain)
 	devImageHandler := handler.NewDevImageHandler(contain)
+	exifHandler := handler.NewExifHandler(contain)
+	
 	// API版本组
 	v1 := r.Group("/api/v1")
 	{
@@ -40,6 +42,20 @@ func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *cont
 			library.DELETE("", libraryHandler.DeleteLibrary)
 			// 执行检索任务
 			library.POST("indexed", libraryHandler.LibraryIndex)
+		}
+		// EXIF信息相关路由
+		exif := v1.Group("/exif")
+		{
+			exif.GET("", exifHandler.GetAllExifs)                                // 获取所有EXIF记录
+			exif.GET("/:hash", exifHandler.GetExifByHash)                        // 根据照片哈希获取EXIF
+			exif.GET("/statistics", exifHandler.GetExifStatistics)               // 获取统计信息
+			exif.GET("/cameras", exifHandler.GetUniqueCameras)                   // 获取相机列表
+			exif.GET("/cameras/stats", exifHandler.GetCameraStatistics)          // 获取相机统计
+			exif.GET("/search", exifHandler.SearchExifs)                         // 搜索EXIF
+			exif.GET("/gps", exifHandler.GetExifsWithGPS)                        // 获取GPS信息
+			exif.GET("/iso", exifHandler.GetExifsByISO)                          // 根据ISO筛选
+			exif.GET("/aperture", exifHandler.GetExifsByAperture)                // 根据光圈筛选
+			exif.GET("/camera", exifHandler.GetExifsByCamera)                    // 根据相机筛选
 		}
 	}
 	// 开发组

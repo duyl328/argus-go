@@ -1,13 +1,15 @@
 package db
 
 import (
-	"rear/internal/model"
+	"rear/internal/model/tables"
 )
 
 func AutoMigrate() error {
 	return DB.AutoMigrate(
-		&model.User{},
-		&model.LibraryTable{},
+		&tables.User{},
+		&tables.LibraryTable{},
+		&tables.Photo{},
+		&tables.PhotoExif{},
 		// 在这里添加其他模型
 	)
 }
