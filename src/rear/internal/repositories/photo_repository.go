@@ -1,10 +1,14 @@
 package repositories
 
 import (
+	"errors"
+	"os"
 	"path/filepath"
 	"rear/internal/db"
+	"rear/internal/model"
 	"rear/internal/model/tables"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -182,11 +186,132 @@ func (r *PhotoRepository) CreatePhotoFromImageAPI(hash, imgPath string, exifData
 		ViewCount: 0,
 	}
 
-	// 如果有EXIF数据，提取基础信息
-	// 这里可以根据实际的EXIF数据结构来填充
-	// if exifData != nil {
-	//     // 从EXIF数据中提取Width, Height, FileSize等
-	// }
+	// 获取文件信息以获取修改时间
+	if fileInfo, err := os.Stat(imgPath); err == nil {
+		fileModTime := fileInfo.ModTime()
+		photo.LastModified = &fileModTime
+	}
+
+	// 如果有EXIF数据，提取基础信息和时间信息
+	if exifData != nil {
+		if parsedExif, ok := exifData.(*model.ParsedExif); ok {
+			// 设置基础图片信息
+			photo.Width = parsedExif.BaseInfo.ImageWidth
+			photo.Height = parsedExif.BaseInfo.ImageHeight
+			photo.FileSize = parsedExif.BaseInfo.FileSize
+			
+			// 计算宽高比
+			if photo.Height > 0 {
+				photo.AspectRatio = float32(photo.Width) / float32(photo.Height)
+			}
+
+			// 处理拍摄时间 - 优先使用EXIF中的拍摄时间，如果没有则使用文件修改时间
+			var takenAt *time.Time
+			
+			// 尝试解析EXIF中的拍摄时间
+			if parsedExif.Exif.DateTimeOrig != "" {
+				if parsedTime, err := parseExifDateTime(parsedExif.Exif.DateTimeOrig); err == nil {
+					takenAt = &parsedTime
+				}
+			}
+			
+			// 如果EXIF中没有拍摄时间，使用文件修改时间
+			if takenAt == nil && photo.LastModified != nil {
+				takenAt = photo.LastModified
+			}
+			
+			photo.TakenAt = takenAt
+
+			// 处理文件创建时间
+			if parsedExif.BaseInfo.CreateDate != "" {
+				if parsedTime, err := parseExifDateTime(parsedExif.BaseInfo.CreateDate); err == nil {
+					photo.FileCreatedAt = &parsedTime
+				}
+			}
+		}
+	}
 
 	return photo
+}
+
+// parseExifDateTime 解析EXIF时间格式
+// EXIF时间格式通常为: "2024:11:04 10:40:29" 或 "2024:11:04 10:40:29+08:00"
+func parseExifDateTime(dateTimeStr string) (time.Time, error) {
+	// 常见的EXIF时间格式
+	formats := []string{
+		"2006:01:02 15:04:05",           // 标准EXIF格式
+		"2006:01:02 15:04:05-07:00",     // 带时区
+		"2006:01:02 15:04:05+07:00",     // 带时区
+		"2006-01-02 15:04:05",           // ISO格式
+		"2006-01-02T15:04:05Z",          // ISO格式带Z
+		"2006-01-02T15:04:05-07:00",     // ISO格式带时区
+	}
+	
+	// 替换EXIF格式中的冒号为横线（年月日部分）
+	normalizedStr := strings.Replace(dateTimeStr, ":", "-", 2)
+	
+	// 尝试不同的格式
+	for _, format := range formats {
+		if t, err := time.Parse(format, dateTimeStr); err == nil {
+			return t, nil
+		}
+		if t, err := time.Parse(format, normalizedStr); err == nil {
+			return t, nil
+		}
+	}
+	
+	// 如果都解析失败，返回错误
+	return time.Time{}, errors.New("unable to parse datetime string: " + dateTimeStr)
+}
+
+// GetPhotosByTakenDateRange 根据拍摄时间范围获取照片
+func (r *PhotoRepository) GetPhotosByTakenDateRange(startDate, endDate time.Time, limit int, offset int) ([]*tables.Photo, error) {
+	var photos []*tables.Photo
+	err := r.db.Where("taken_at BETWEEN ? AND ?", startDate, endDate).
+		Order("taken_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&photos).Error
+	return photos, err
+}
+
+// GetPhotosByModifiedDateRange 根据文件修改时间范围获取照片
+func (r *PhotoRepository) GetPhotosByModifiedDateRange(startDate, endDate time.Time, limit int, offset int) ([]*tables.Photo, error) {
+	var photos []*tables.Photo
+	err := r.db.Where("last_modified BETWEEN ? AND ?", startDate, endDate).
+		Order("last_modified DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&photos).Error
+	return photos, err
+}
+
+// GetRecentPhotosByTaken 获取最近拍摄的照片
+func (r *PhotoRepository) GetRecentPhotosByTaken(limit int) ([]*tables.Photo, error) {
+	var photos []*tables.Photo
+	err := r.db.Where("taken_at IS NOT NULL").
+		Order("taken_at DESC").
+		Limit(limit).
+		Find(&photos).Error
+	return photos, err
+}
+
+// GetOldestPhotosByTaken 获取最早拍摄的照片
+func (r *PhotoRepository) GetOldestPhotosByTaken(limit int) ([]*tables.Photo, error) {
+	var photos []*tables.Photo
+	err := r.db.Where("taken_at IS NOT NULL").
+		Order("taken_at ASC").
+		Limit(limit).
+		Find(&photos).Error
+	return photos, err
+}
+
+// GetPhotosWithoutTakenDate 获取没有拍摄时间的照片
+func (r *PhotoRepository) GetPhotosWithoutTakenDate(limit int, offset int) ([]*tables.Photo, error) {
+	var photos []*tables.Photo
+	err := r.db.Where("taken_at IS NULL").
+		Limit(limit).
+		Offset(offset).
+		Find(&photos).Error
+	return photos, err
 }

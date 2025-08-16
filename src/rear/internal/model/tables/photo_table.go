@@ -18,6 +18,10 @@ type Photo struct {
 
 	// 文件创建时间
 	FileCreatedAt *time.Time `json:"fileCreatedAt,omitempty"`
+	// 照片拍摄时间（优先使用EXIF中的拍摄时间，如果没有则使用文件修改时间）
+	TakenAt *time.Time `json:"takenAt,omitempty"`
+	// 文件最后修改时间
+	LastModified *time.Time `json:"lastModified,omitempty"`
 
 	// ========================= 用户行为数据 ==============================
 

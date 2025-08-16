@@ -12,7 +12,6 @@ import (
 	"rear/pkg/logger"
 	"rear/pkg/utils"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 )
@@ -398,23 +397,6 @@ func (pt *PictureTask) saveToDatabase(imageAPI *api.ImageAPI) error {
 	if !isPhotoRepoNil(pt.photoRepo) {
 		photo := pt.photoRepo.CreatePhotoFromImageAPI(hash, pt.Path, exifData)
 		
-		// 如果有EXIF数据，从中提取基础信息
-		if exifData != nil {
-			photo.Width = exifData.BaseInfo.ImageWidth
-			photo.Height = exifData.BaseInfo.ImageHeight
-			photo.FileSize = exifData.BaseInfo.FileSize
-			
-			// 计算宽高比
-			if photo.Height > 0 {
-				photo.AspectRatio = float32(photo.Width) / float32(photo.Height)
-			}
-			
-			// 设置格式（如果EXIF中有的话）
-			if exifData.BaseInfo.FileType != "" {
-				photo.Format = strings.ToLower(exifData.BaseInfo.FileType)
-			}
-		}
-		
 		err := pt.photoRepo.CreateOrUpdate(photo)
 		if err != nil {
 			logger.Error("保存Photo信息失败",
@@ -429,6 +411,18 @@ func (pt *PictureTask) saveToDatabase(imageAPI *api.ImageAPI) error {
 			zap.String("path", pt.Path),
 			zap.Int("width", photo.Width),
 			zap.Int("height", photo.Height))
+		
+		// 记录时间相关信息
+		if photo.TakenAt != nil {
+			logger.Info("照片拍摄时间",
+				zap.String("hash", hash),
+				zap.Time("taken_at", *photo.TakenAt))
+		}
+		if photo.LastModified != nil {
+			logger.Info("文件修改时间",
+				zap.String("hash", hash),
+				zap.Time("last_modified", *photo.LastModified))
+		}
 	}
 
 	logger.Info("图像信息保存完成", zap.String("hash", hash))
