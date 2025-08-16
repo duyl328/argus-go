@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"rear/internal/db"
@@ -200,9 +201,10 @@ func (r *PhotoRepository) CreatePhotoFromImageAPI(hash, imgPath string, exifData
 			photo.Height = parsedExif.BaseInfo.ImageHeight
 			photo.FileSize = parsedExif.BaseInfo.FileSize
 			
-			// 计算宽高比
+			// 计算宽高比（保留2位小数）
 			if photo.Height > 0 {
-				photo.AspectRatio = float32(photo.Width) / float32(photo.Height)
+				ratio := float64(photo.Width) / float64(photo.Height)
+				photo.AspectRatio = float32(math.Round(ratio*100) / 100)
 			}
 
 			// 处理拍摄时间 - 优先使用EXIF中的拍摄时间，如果没有则使用文件修改时间

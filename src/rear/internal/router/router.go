@@ -19,6 +19,7 @@ func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *cont
 	libraryHandler := handler.NewLibraryHandler(contain, imgContain)
 	devImageHandler := handler.NewDevImageHandler(contain)
 	exifHandler := handler.NewExifHandler(contain)
+	photoHandler := handler.NewPhotoHandler(contain, imgContain)
 	
 	// API版本组
 	v1 := r.Group("/api/v1")
@@ -56,6 +57,18 @@ func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *cont
 			exif.GET("/iso", exifHandler.GetExifsByISO)                          // 根据ISO筛选
 			exif.GET("/aperture", exifHandler.GetExifsByAperture)                // 根据光圈筛选
 			exif.GET("/camera", exifHandler.GetExifsByCamera)                    // 根据相机筛选
+		}
+		
+		// 照片相关路由
+		photo := v1.Group("/photo")
+		{
+			photo.GET("/:hash", photoHandler.GetPhoto)                           // 获取图像文件
+		}
+		
+		// 资产信息相关路由
+		assets := v1.Group("/assets")
+		{
+			assets.GET("/:hash", photoHandler.GetPhotoAssets)                    // 获取图像详细信息
 		}
 	}
 	// 开发组

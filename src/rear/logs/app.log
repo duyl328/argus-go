@@ -50,3 +50,4 @@
 {"level":"info","time":"2025-08-16 16:08:27.263","caller":"config/config.go:88","msg":"加载配置文件成功","path":"config.yaml"}
 {"level":"info","time":"2025-08-16 17:14:28.812","caller":"config/config.go:90","msg":"加载配置文件成功","path":"config.yaml"}
 {"level":"info","time":"2025-08-16 17:14:57.883","caller":"config/config.go:90","msg":"加载配置文件成功","path":"config.yaml"}
+{"level":"info","time":"2025-08-16 17:34:36.360","caller":"config/config.go:90","msg":"加载配置文件成功","path":"config.yaml"}
