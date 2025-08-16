@@ -16,6 +16,8 @@ type ImageCompressionOptions struct {
 	ThumbnailFormat consts.ImageFormat
 	// 缩略图大小
 	ThumbnailSize []int
+	// 默认缩略图大小
+	DefaultThumbnailSize int
 	// 缩略图质量
 	ThumbnailQuality int
 	// 用户屏幕尺寸大小
@@ -101,10 +103,11 @@ func InitConfig() *Config {
 
 	// 转换为原有的配置格式，保持向后兼容
 	imageCompressionOptions := ImageCompressionOptions{
-		ThumbnailFormat:  convertToImageFormat(fileConfig.Image.ThumbnailFormat),
-		ThumbnailSize:    fileConfig.Image.ThumbnailSize,
-		ThumbnailQuality: fileConfig.Image.ThumbnailQuality,
-		ScreenSize:       fileConfig.Image.ScreenSize,
+		ThumbnailFormat:      convertToImageFormat(fileConfig.Image.ThumbnailFormat),
+		ThumbnailSize:        fileConfig.Image.ThumbnailSize,
+		DefaultThumbnailSize: fileConfig.Image.DefaultThumbnailSize,
+		ThumbnailQuality:     fileConfig.Image.ThumbnailQuality,
+		ScreenSize:           fileConfig.Image.ScreenSize,
 	}
 
 	pathConfig := PathConfig{
@@ -264,4 +267,13 @@ func GetTaskConfig() TaskConfig {
 		zap.Bool("auto_start", taskConfig.AutoStart))
 
 	return taskConfig
+}
+
+// GetDefaultThumbnailSize 获取默认缩略图尺寸
+func GetDefaultThumbnailSize() int {
+	if CONFIG.ImageCompressionOption.DefaultThumbnailSize > 0 {
+		return CONFIG.ImageCompressionOption.DefaultThumbnailSize
+	}
+	// 如果未设置或为0，返回默认值720
+	return 720
 }

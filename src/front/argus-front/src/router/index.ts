@@ -31,6 +31,12 @@ const router = createRouter({
       component: () => import('@/views/FieldView.vue'),
       meta: { title: '文件夹' }
     },
+    {
+      path: '/local-files',
+      name: 'local-files',
+      component: () => import('@/views/LocalFilesView.vue'),
+      meta: { title: '本地文件' }
+    },
 
     {
       path: '/library',

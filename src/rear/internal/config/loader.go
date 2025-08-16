@@ -52,11 +52,12 @@ type LoggingConfig struct {
 
 // ImageConfig 图像处理配置
 type ImageConfig struct {
-	ThumbnailFormat  string `yaml:"thumbnail_format" json:"thumbnail_format"`
-	ThumbnailSize    []int  `yaml:"thumbnail_size" json:"thumbnail_size"`
-	ThumbnailQuality int    `yaml:"thumbnail_quality" json:"thumbnail_quality"`
-	ScreenSize       int    `yaml:"screen_size" json:"screen_size"`
-	SupportedFormats struct {
+	ThumbnailFormat      string `yaml:"thumbnail_format" json:"thumbnail_format"`
+	ThumbnailSize        []int  `yaml:"thumbnail_size" json:"thumbnail_size"`
+	DefaultThumbnailSize int    `yaml:"default_thumbnail_size" json:"default_thumbnail_size"`
+	ThumbnailQuality     int    `yaml:"thumbnail_quality" json:"thumbnail_quality"`
+	ScreenSize           int    `yaml:"screen_size" json:"screen_size"`
+	SupportedFormats     struct {
 		Base      []string `yaml:"base" json:"base"`
 		Special   []string `yaml:"special" json:"special"`
 		Thumbnail []string `yaml:"thumbnail" json:"thumbnail"`
@@ -155,10 +156,11 @@ func GetDefaultFileConfig() *FileConfig {
 			MaxLifetime:  0,
 		},
 		Image: ImageConfig{
-			ThumbnailFormat:  "jpg",
-			ThumbnailSize:    []int{512, 720},
-			ThumbnailQuality: 80,
-			ScreenSize:       1080,
+			ThumbnailFormat:      "jpg",
+			ThumbnailSize:        []int{512, 720},
+			DefaultThumbnailSize: 720,
+			ThumbnailQuality:     80,
+			ScreenSize:           1080,
 			SupportedFormats: struct {
 				Base      []string `yaml:"base" json:"base"`
 				Special   []string `yaml:"special" json:"special"`
@@ -286,6 +288,9 @@ func MergeWithDefaults(fileConfig *FileConfig) *FileConfig {
 	}
 	if fileConfig.Image.ScreenSize == 0 {
 		fileConfig.Image.ScreenSize = defaultConfig.Image.ScreenSize
+	}
+	if fileConfig.Image.DefaultThumbnailSize == 0 {
+		fileConfig.Image.DefaultThumbnailSize = defaultConfig.Image.DefaultThumbnailSize
 	}
 	if len(fileConfig.Image.SupportedFormats.Base) == 0 {
 		fileConfig.Image.SupportedFormats.Base = defaultConfig.Image.SupportedFormats.Base

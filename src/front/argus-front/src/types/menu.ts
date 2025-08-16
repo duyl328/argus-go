@@ -40,6 +40,12 @@ export const menuOptions: MenuOption[] = [
     icon: 'folder-outline',
     path: '/field',
   },
+  {
+    key: 'local-files',
+    label: '本地文件',
+    icon: 'archive-outline',
+    path: '/local-files',
+  },
   // 媒体分组
   {
     key: 'media',

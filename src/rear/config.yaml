@@ -18,3 +18,11 @@ logging:
 
 database:
   type: "sqlite"
+
+# 图像处理配置
+image:
+  thumbnail_format: "jpg"
+  thumbnail_size: [512, 720]
+  default_thumbnail_size: 720  # 默认使用的缩略图尺寸
+  thumbnail_quality: 80
+  screen_size: 1080
