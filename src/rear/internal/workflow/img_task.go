@@ -7,9 +7,12 @@ import (
 	"go.uber.org/zap"
 	"rear/internal/api"
 	"rear/internal/config"
+	"rear/internal/model/tables"
+	"rear/internal/repositories"
 	"rear/pkg/logger"
 	"rear/pkg/utils"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -137,6 +140,10 @@ type PictureTask struct {
 	UpdateTime    time.Time      `json:"update_time"`              // 最后更新时间
 	CompletedTime *time.Time     `json:"completed_time,omitempty"` // 完成时间
 
+	// 数据库仓库
+	exifRepo  *repositories.ExifRepository
+	photoRepo *repositories.PhotoRepository
+
 	ctx      context.Context
 	cancel   context.CancelFunc
 	mu       sync.Mutex
@@ -144,7 +151,7 @@ type PictureTask struct {
 	resumeCh chan struct{}
 }
 
-func NewPictureTask(path string) *PictureTask {
+func NewPictureTask(path string, exifRepo *repositories.ExifRepository, photoRepo *repositories.PhotoRepository) *PictureTask {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// 初始化所有步骤信息
@@ -171,6 +178,8 @@ func NewPictureTask(path string) *PictureTask {
 		AllSteps:    allSteps,
 		StartTime:   time.Now(),
 		UpdateTime:  time.Now(),
+		exifRepo:    exifRepo,
+		photoRepo:   photoRepo,
 		ctx:         ctx,
 		cancel:      cancel,
 		pauseCh:     make(chan struct{}, 1),
@@ -349,25 +358,80 @@ func (pt *PictureTask) setStatus(s TaskStatus) {
 
 // saveToDatabase 保存图像信息到数据库
 func (pt *PictureTask) saveToDatabase(imageAPI *api.ImageAPI) error {
-	// TODO: 实现数据库保存逻辑
-	// 这里应该保存到 photos 表和 photo_exif 表
-
 	exifData := imageAPI.GetExifData()
 	hash := imageAPI.GetHash()
+	
+	if hash == "" {
+		return fmt.Errorf("图像哈希值为空")
+	}
 
 	logger.Info("保存图像信息到数据库",
 		zap.String("hash", hash),
 		zap.String("path", pt.Path))
 
-	// 模拟数据库操作
-	if exifData != nil {
-		logger.Debug("EXIF信息",
+	// 1. 保存EXIF信息到photo_exif表
+	if exifData != nil && !isExifRepoNil(pt.exifRepo) {
+		// 创建PhotoExif表记录
+		photoExif := tables.NewPhotoExifFromParsed(hash, exifData)
+		
+		// 保存到数据库
+		err := pt.exifRepo.CreateOrUpdate(photoExif)
+		if err != nil {
+			logger.Error("保存EXIF信息失败",
+				zap.String("hash", hash),
+				zap.String("path", pt.Path),
+				zap.Error(err))
+			return fmt.Errorf("保存EXIF信息失败: %w", err)
+		}
+
+		logger.Info("EXIF信息保存成功",
+			zap.String("hash", hash),
 			zap.String("make", exifData.Exif.Make),
 			zap.String("model", exifData.Exif.Model),
 			zap.Int("width", exifData.BaseInfo.ImageWidth),
 			zap.Int("height", exifData.BaseInfo.ImageHeight))
+	} else {
+		logger.Warn("没有EXIF数据可保存", zap.String("hash", hash))
 	}
 
+	// 2. 保存Photo基础信息到photos表
+	if !isPhotoRepoNil(pt.photoRepo) {
+		photo := pt.photoRepo.CreatePhotoFromImageAPI(hash, pt.Path, exifData)
+		
+		// 如果有EXIF数据，从中提取基础信息
+		if exifData != nil {
+			photo.Width = exifData.BaseInfo.ImageWidth
+			photo.Height = exifData.BaseInfo.ImageHeight
+			photo.FileSize = exifData.BaseInfo.FileSize
+			
+			// 计算宽高比
+			if photo.Height > 0 {
+				photo.AspectRatio = float32(photo.Width) / float32(photo.Height)
+			}
+			
+			// 设置格式（如果EXIF中有的话）
+			if exifData.BaseInfo.FileType != "" {
+				photo.Format = strings.ToLower(exifData.BaseInfo.FileType)
+			}
+		}
+		
+		err := pt.photoRepo.CreateOrUpdate(photo)
+		if err != nil {
+			logger.Error("保存Photo信息失败",
+				zap.String("hash", hash),
+				zap.String("path", pt.Path),
+				zap.Error(err))
+			return fmt.Errorf("保存Photo信息失败: %w", err)
+		}
+		
+		logger.Info("Photo信息保存成功",
+			zap.String("hash", hash),
+			zap.String("path", pt.Path),
+			zap.Int("width", photo.Width),
+			zap.Int("height", photo.Height))
+	}
+
+	logger.Info("图像信息保存完成", zap.String("hash", hash))
 	return nil
 }
 
@@ -396,9 +460,11 @@ type ImgTaskManager struct {
 	poolMu       sync.Mutex
 	doneCount    int
 	autoAdjust   bool
+	exifRepo     *repositories.ExifRepository
+	photoRepo    *repositories.PhotoRepository
 }
 
-func NewImgTaskManager(concurrency int) *ImgTaskManager {
+func NewImgTaskManager(concurrency int, exifRepo *repositories.ExifRepository, photoRepo *repositories.PhotoRepository) *ImgTaskManager {
 	taskConfig := config.GetTaskConfig()
 
 	if concurrency <= 0 {
@@ -413,6 +479,8 @@ func NewImgTaskManager(concurrency int) *ImgTaskManager {
 		globalPause:  make(chan struct{}, 1),
 		globalResume: make(chan struct{}, 1),
 		autoAdjust:   taskConfig.AutoAdjust,
+		exifRepo:     exifRepo,
+		photoRepo:    photoRepo,
 	}
 
 	// 启动工作协程和监控协程
@@ -434,7 +502,7 @@ var (
 )
 
 // InitGlobalTaskManager 初始化全局任务管理器
-func InitGlobalTaskManager() {
+func InitGlobalTaskManager(exifRepo *repositories.ExifRepository, photoRepo *repositories.PhotoRepository) {
 	taskManagerOnce.Do(func() {
 		taskConfig := config.GetTaskConfig()
 
@@ -443,7 +511,7 @@ func InitGlobalTaskManager() {
 			return
 		}
 
-		globalTaskManager = NewImgTaskManager(taskConfig.Concurrency)
+		globalTaskManager = NewImgTaskManager(taskConfig.Concurrency, exifRepo, photoRepo)
 		logger.Info("全局任务管理器已初始化",
 			zap.Int("concurrency", taskConfig.Concurrency),
 			zap.Bool("auto_adjust", taskConfig.AutoAdjust))
@@ -453,8 +521,8 @@ func InitGlobalTaskManager() {
 // GetGlobalTaskManager 获取全局任务管理器实例
 func GetGlobalTaskManager() *ImgTaskManager {
 	if globalTaskManager == nil {
-		logger.Warn("全局任务管理器未初始化，正在初始化...")
-		InitGlobalTaskManager()
+		logger.Warn("全局任务管理器未初始化")
+		return nil
 	}
 	return globalTaskManager
 }
@@ -513,7 +581,7 @@ func (tm *ImgTaskManager) SetConcurrency(n int) {
 }
 
 func (tm *ImgTaskManager) AddTask(path string) string {
-	task := NewPictureTask(path)
+	task := NewPictureTask(path, tm.exifRepo, tm.photoRepo)
 	tm.mu.Lock()
 	tm.tasks[task.ID] = task
 	tm.mu.Unlock()

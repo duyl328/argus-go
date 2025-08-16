@@ -16,6 +16,6 @@ type TaskContainer struct {
 func NewTaskContainer(con *DbContainer) *TaskContainer {
 	return &TaskContainer{
 		DbContainer:    con,
-		ImgTaskManager: workflow.NewImgTaskManager(5),
+		ImgTaskManager: workflow.NewImgTaskManager(5, con.ExifRepo, con.PhotoRepo),
 	}
 }
