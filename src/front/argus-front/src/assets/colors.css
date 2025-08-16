@@ -1,0 +1,196 @@
+/* 统一颜色管理系统 */
+
+:root {
+  /* ============================================
+   * 基础颜色调色板
+   * ============================================ */
+  
+  /* 中性色调色板 */
+  --neutral-50: #fafafa;
+  --neutral-100: #f5f5f5;
+  --neutral-200: #e5e5e5;
+  --neutral-300: #d4d4d4;
+  --neutral-400: #a3a3a3;
+  --neutral-500: #737373;
+  --neutral-600: #525252;
+  --neutral-700: #404040;
+  --neutral-800: #262626;
+  --neutral-900: #171717;
+  --neutral-950: #0a0a0a;
+
+  /* 蓝色调色板 */
+  --blue-50: #eff6ff;
+  --blue-100: #dbeafe;
+  --blue-500: #3b82f6;
+  --blue-600: #2563eb;
+  --blue-700: #1d4ed8;
+
+  /* 红色调色板 */
+  --red-50: #fef2f2;
+  --red-100: #fee2e2;
+  --red-400: #f87171;
+  --red-500: #ef4444;
+  --red-600: #dc2626;
+  --red-700: #b91c1c;
+  --red-danger: #d03050;
+
+  /* 绿色调色板 */
+  --green-50: #f0fdf4;
+  --green-100: #dcfce7;
+  --green-500: #22c55e;
+  --green-600: #16a34a;
+
+  /* 黄色调色板 */
+  --yellow-50: #fefce8;
+  --yellow-100: #fef3c7;
+  --yellow-500: #eab308;
+  --yellow-600: #ca8a04;
+
+  /* ============================================
+   * 语义化颜色变量
+   * ============================================ */
+  
+  /* 状态颜色 */
+  --color-success: var(--green-600);
+  --color-warning: var(--yellow-500);
+  --color-error: var(--red-500);
+  --color-danger: var(--red-danger);
+  --color-info: var(--blue-500);
+
+  /* 交互颜色 */
+  --color-primary: var(--blue-600);
+  --color-primary-hover: var(--blue-700);
+  --color-secondary: var(--neutral-600);
+  --color-secondary-hover: var(--neutral-700);
+
+  /* ============================================
+   * 透明度变量
+   * ============================================ */
+  --opacity-disabled: 0.5;
+  --opacity-hover: 0.8;
+  --opacity-focus: 0.9;
+  --opacity-overlay: 0.6;
+
+  /* ============================================
+   * 阴影颜色变量
+   * ============================================ */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================
+ * 浅色主题颜色映射
+ * ============================================ */
+:root,
+html.light {
+  /* 背景色 */
+  --bg-color: #ffffff;
+  --bg-color-secondary: var(--neutral-100);
+  --bg-color-tertiary: var(--neutral-50);
+  --bg-elevated: #ffffff;
+  
+  /* 文字颜色 */
+  --text-color: var(--neutral-900);
+  --text-color-secondary: var(--neutral-600);
+  --text-color-tertiary: var(--neutral-500);
+  --text-color-disabled: var(--neutral-400);
+  --text-color-inverse: #ffffff;
+  
+  /* 边框颜色 */
+  --border-color: var(--neutral-300);
+  --border-color-light: var(--neutral-200);
+  --border-color-strong: var(--neutral-400);
+  
+  /* 交互状态颜色 */
+  --hover-bg: rgba(0, 0, 0, 0.04);
+  --hover-bg-secondary: rgba(0, 0, 0, 0.08);
+  --active-bg: rgba(0, 0, 0, 0.12);
+  --focus-ring: rgba(59, 130, 246, 0.3);
+  
+  /* 组件背景色 */
+  --header-bg: #ffffff;
+  --sidebar-bg: #ffffff;
+  --content-bg: var(--neutral-100);
+  --card-bg: #ffffff;
+  --input-bg: #ffffff;
+  --button-bg: #ffffff;
+  
+  /* 阴影颜色 */
+  --shadow-color: rgba(0, 0, 0, 0.08);
+  --shadow-color-light: rgba(0, 0, 0, 0.04);
+  --shadow-color-strong: rgba(0, 0, 0, 0.12);
+}
+
+/* ============================================
+ * 深色主题颜色映射
+ * ============================================ */
+html.dark {
+  /* 背景色 */
+  --bg-color: var(--neutral-950);
+  --bg-color-secondary: var(--neutral-900);
+  --bg-color-tertiary: var(--neutral-800);
+  --bg-elevated: var(--neutral-900);
+  
+  /* 文字颜色 */
+  --text-color: var(--neutral-50);
+  --text-color-secondary: var(--neutral-300);
+  --text-color-tertiary: var(--neutral-400);
+  --text-color-disabled: var(--neutral-600);
+  --text-color-inverse: var(--neutral-900);
+  
+  /* 边框颜色 */
+  --border-color: var(--neutral-700);
+  --border-color-light: var(--neutral-800);
+  --border-color-strong: var(--neutral-600);
+  
+  /* 交互状态颜色 */
+  --hover-bg: rgba(255, 255, 255, 0.08);
+  --hover-bg-secondary: rgba(255, 255, 255, 0.12);
+  --active-bg: rgba(255, 255, 255, 0.16);
+  --focus-ring: rgba(59, 130, 246, 0.4);
+  
+  /* 组件背景色 */
+  --header-bg: var(--neutral-950);
+  --sidebar-bg: var(--neutral-950);
+  --content-bg: var(--neutral-900);
+  --card-bg: var(--neutral-900);
+  --input-bg: var(--neutral-900);
+  --button-bg: var(--neutral-900);
+  
+  /* 阴影颜色 */
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --shadow-color-light: rgba(0, 0, 0, 0.2);
+  --shadow-color-strong: rgba(0, 0, 0, 0.4);
+  
+  /* 深色模式特有颜色调整 */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.5);
+}
+
+/* ============================================
+ * 特殊用途颜色变量
+ * ============================================ */
+:root {
+  /* 分割线颜色 */
+  --divider-color: var(--border-color-light);
+  --divider-color-strong: var(--border-color);
+  
+  /* 遮罩颜色 */
+  --overlay-color: rgba(0, 0, 0, var(--opacity-overlay));
+  --modal-backdrop: rgba(0, 0, 0, 0.5);
+  
+  /* 滚动条颜色 */
+  --scrollbar-track: var(--bg-color-secondary);
+  --scrollbar-thumb: var(--border-color);
+  --scrollbar-thumb-hover: var(--text-color-secondary);
+  
+  /* 选择颜色 */
+  --selection-bg: rgba(59, 130, 246, 0.2);
+  --selection-color: var(--text-color);
+}

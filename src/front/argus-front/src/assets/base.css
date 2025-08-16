@@ -1,4 +1,4 @@
-/* �@7�n�;�M */
+/* 基础样式重置和主题适配 */
 *,
 *::before,
 *::after {
@@ -11,9 +11,11 @@ body {
   min-height: 100vh;
   color: var(--text-color);
   background: var(--bg-color);
-  transition: color 0.3s, background-color 0.3s;
-  line-height: 1.6;
+  transition: color var(--transition-normal), background-color var(--transition-normal);
+  line-height: var(--line-height-normal);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -30,14 +32,14 @@ body {
 a {
   color: var(--text-color);
   text-decoration: none;
-  transition: color 0.3s;
+  transition: color var(--transition-normal), opacity var(--transition-normal);
 }
 
 a:hover {
-  opacity: 0.8;
+  opacity: var(--opacity-hover);
 }
 
-/* n�@	�h�(;��� */
+/* 确保所有容器都使用主题变量 */
 .n-layout,
 .n-layout-header,
 .n-layout-sider,
@@ -45,43 +47,91 @@ a:hover {
 .n-layout-footer {
   background-color: var(--bg-color) !important;
   color: var(--text-color) !important;
-  transition: background-color 0.3s, color 0.3s;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
 }
 
-/* �r!�ڨa7 */
-html.dark ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* 确保所有文本元素都使用主题颜色 */
+h1, h2, h3, h4, h5, h6, p, span, div {
+  color: inherit;
 }
 
-html.dark ::-webkit-scrollbar-track {
-  background: var(--bg-color-secondary);
+/* 输入框样式适配 */
+input, textarea, select {
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  border-color: var(--border-color);
+  transition: all var(--transition-normal);
 }
 
-html.dark ::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 4px;
+/* 按钮基础样式适配 */
+button {
+  background-color: var(--button-bg);
+  color: var(--text-color);
+  border-color: var(--border-color);
+  transition: all var(--transition-normal);
 }
 
-html.dark ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-color-secondary);
+/* 通用滚动条样式 */
+::-webkit-scrollbar {
+  width: var(--spacing-sm);
+  height: var(--spacing-sm);
 }
 
-/* Er!�ڨa7 */
-html.light ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
 }
 
-html.light ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-fast);
 }
 
-html.light ::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 4px;
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
-html.light ::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
+/* 文本选择样式 */
+::selection {
+  background-color: var(--selection-bg);
+  color: var(--selection-color);
+}
+
+/* 焦点样式 */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* 禁用元素样式 */
+:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+/* 通用过渡效果 */
+.transition-colors {
+  transition: color var(--transition-normal), background-color var(--transition-normal), border-color var(--transition-normal);
+}
+
+.transition-all {
+  transition: all var(--transition-normal);
+}
+
+.transition-fast {
+  transition: all var(--transition-fast);
+}
+
+/* 通用阴影类 */
+.shadow-sm {
+  box-shadow: var(--shadow-sm);
+}
+
+.shadow-md {
+  box-shadow: var(--shadow-md);
+}
+
+.shadow-lg {
+  box-shadow: var(--shadow-lg);
 }

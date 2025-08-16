@@ -31,7 +31,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3049, // 设置你想要的端口号
+    port: 0, // 设置你想要的端口号
     host: false, // 可选：允许外部访问
   },
 })

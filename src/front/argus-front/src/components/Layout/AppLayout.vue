@@ -221,7 +221,7 @@ const handleMenuSelect = (key: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 var(--spacing-lg);
   max-width: 100%;
 }
 
@@ -239,7 +239,7 @@ const handleMenuSelect = (key: string) => {
 }
 
 .logo-icon {
-  margin-right: 12px;
+  margin-right: var(--spacing-md);
 }
 
 .logo-icon img {
@@ -249,8 +249,8 @@ const handleMenuSelect = (key: string) => {
 }
 
 .site-title {
-  font-size: 20px;
-  font-weight: 600;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-color);
   white-space: nowrap;
 }
@@ -374,15 +374,36 @@ const handleMenuSelect = (key: string) => {
 
 :deep(.n-menu-item) {
   color: var(--text-color) !important;
+  margin-right: 12px !important;
+}
+
+/* 折叠状态下的菜单项样式 */
+:deep(.n-layout-sider--collapsed .n-menu-item) {
+  margin-right: 0 !important;
+  margin-left: 0 !important;
+}
+
+:deep(.n-layout-sider--collapsed .n-menu-item:hover) {
+  margin-right: 0 !important;
+  margin-left: 0 !important;
+}
+
+:deep(.n-layout-sider--collapsed .n-menu-item.n-menu-item--selected) {
+  margin-right: 0 !important;
+  margin-left: 0 !important;
 }
 
 :deep(.n-menu-item:hover) {
   background-color: var(--hover-bg) !important;
+  margin-right: 12px !important;
+  border-radius: 6px !important;
 }
 
 :deep(.n-menu-item.n-menu-item--selected) {
   background-color: var(--hover-bg) !important;
   color: var(--text-color) !important;
+  margin-right: 12px !important;
+  border-radius: 6px !important;
 }
 
 :deep(.n-input) {

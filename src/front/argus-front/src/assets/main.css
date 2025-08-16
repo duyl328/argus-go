@@ -1,6 +1,9 @@
+@import "colors.css";
 @import "var.css";
 @import "base.css";
 @import "theme-override.css";
+
+/* 应用特定样式 */
 
 /* 禁止选中 */
 .no-select {
@@ -10,30 +13,33 @@
   -ms-user-select: none;      /* IE10+/Edge */
 }
 
-/* 全局容器样式，确保主题一致性 */
-html, body {
-  margin: 0;
+/* 工具类 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   padding: 0;
-  background-color: var(--bg-color);
-  color: var(--text-color);
-  transition: background-color 0.3s ease, color 0.3s ease;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
-/* 确保所有文本元素都使用主题颜色 */
-h1, h2, h3, h4, h5, h6, p, span, div {
-  color: inherit;
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* 输入框样式适配 */
-input, textarea, select {
-  background-color: var(--bg-color);
-  color: var(--text-color);
-  border-color: var(--border-color);
+.text-center {
+  text-align: center;
 }
 
-/* 按钮基础样式适配 */
-button {
-  background-color: var(--bg-color-secondary);
-  color: var(--text-color);
-  border-color: var(--border-color);
+.text-left {
+  text-align: left;
+}
+
+.text-right {
+  text-align: right;
 }
