@@ -14,17 +14,17 @@
         :prerender="10"
       >
         <!-- 时期标题 -->
-        <div 
-          v-if="item.type === 'header'" 
+        <div
+          v-if="item.type === 'header'"
           class="period-header"
           :ref="(el) => setPeriodRef(item.periodId, el as HTMLElement)"
         >
           <h2 class="period-title">{{ item.period?.displayName }}</h2>
           <span class="photo-count">{{ item.period?.photos.length }} 张照片</span>
         </div>
-        
+
         <!-- 照片行或间距 -->
-        <div 
+        <div
           v-else-if="item.type === 'row'"
           class="photos-row"
           :class="{ 'fill-width': (item.photos?.length || 0) > 2 }"
@@ -58,6 +58,7 @@
       @mouseenter="timelineHovered = true"
       @mouseleave="timelineHovered = false"
       @mousemove="handleTimelineHover"
+      @click="handleTimelineClick"
     >
       <div class="timeline-container">
         <!-- 时间线背景线 -->
@@ -232,7 +233,7 @@ const virtualItems = computed<VirtualItem[]>(() => {
     photosPerRow = Math.max(2, Math.floor(containerWidth.value / 200)) // 移动端最少2列
   }
   photosPerRow = Math.max(1, photosPerRow)
-  
+
   photoPeriods.value.forEach(period => {
     // 添加时期标题
     items.push({
@@ -242,7 +243,7 @@ const virtualItems = computed<VirtualItem[]>(() => {
       id: `header-${period.id}`,
       size: 80 // 标题固定高度
     })
-    
+
     // 将照片分割成行
     for (let i = 0; i < period.photos.length; i += photosPerRow) {
       const rowPhotos = period.photos.slice(i, i + photosPerRow)
@@ -254,7 +255,7 @@ const virtualItems = computed<VirtualItem[]>(() => {
         size: isMobile.value ? 152 : isTablet.value ? 192 : 216 // 响应式行高度
       })
     }
-    
+
     // 添加时期底部间距
     items.push({
       type: 'row',
@@ -264,7 +265,7 @@ const virtualItems = computed<VirtualItem[]>(() => {
       size: 32 // 底部间距
     })
   })
-  
+
   return items
 })
 
@@ -353,7 +354,7 @@ const handleVirtualScroll = (event: Event) => {
   let accumulatedHeight = 0
   let currentPeriodId = ''
   const viewportCenter = scrollTop + containerHeight / 2
-  
+
   for (const item of virtualItems.value) {
     if (accumulatedHeight + item.size > viewportCenter) {
       currentPeriodId = item.periodId
@@ -361,7 +362,7 @@ const handleVirtualScroll = (event: Event) => {
     }
     accumulatedHeight += item.size
   }
-  
+
   if (currentPeriodId && currentPeriodId !== activePeriodId.value) {
     activePeriodId.value = currentPeriodId
     // 根据当前时期更新时间显示
@@ -389,15 +390,15 @@ const scrollToPeriod = (periodId: string) => {
       for (let i = 0; i < targetIndex; i++) {
         accumulatedHeight += virtualItems.value[i].size
       }
-      
+
       scroller.scrollTo({
         top: accumulatedHeight,
         behavior: 'smooth'
       })
-      
+
       // 同步更新状态
       activePeriodId.value = periodId
-      
+
       // 立即更新进度条位置
       const scrollHeight = scroller.scrollHeight - scroller.clientHeight
       const newProgress = Math.min(accumulatedHeight / scrollHeight, 1)
@@ -430,16 +431,16 @@ const handleTimelineHover = (event: MouseEvent) => {
   const rect = timelineNav.getBoundingClientRect()
   const relativeY = event.clientY - rect.top
   const hoverProgress = Math.max(0, Math.min(1, relativeY / rect.height))
-  
+
   hoverTimePosition.value = hoverProgress * 100
-  
+
   // 根据悬停位置计算对应的时间
   const totalPeriods = photoPeriods.value.length
   if (totalPeriods > 0) {
     const periodIndex = Math.floor(hoverProgress * totalPeriods)
     const safeIndex = Math.max(0, Math.min(totalPeriods - 1, periodIndex))
     const period = photoPeriods.value[safeIndex]
-    
+
     // 在时期内计算具体日期
     const periodProgress = (hoverProgress * totalPeriods) - periodIndex
     const dayInMonth = Math.floor(periodProgress * 30) + 1
@@ -448,11 +449,50 @@ const handleTimelineHover = (event: MouseEvent) => {
   }
 }
 
+// 时间线点击跳转处理
+const handleTimelineClick = (event: MouseEvent) => {
+  const timelineNav = event.currentTarget as HTMLElement
+  const rect = timelineNav.getBoundingClientRect()
+  const relativeY = event.clientY - rect.top
+  const clickProgress = Math.max(0, Math.min(1, relativeY / rect.height))
+
+  // 计算目标滚动位置
+  const scroller = document.querySelector('.virtual-scroller') as HTMLElement
+  if (scroller && virtualItems.value.length > 0) {
+    // 计算总内容高度
+    const totalHeight = virtualItems.value.reduce((sum, item) => sum + item.size, 0)
+    const scrollHeight = scroller.scrollHeight - scroller.clientHeight
+    const targetScrollTop = Math.min(clickProgress * scrollHeight, scrollHeight)
+
+    // 平滑滚动到目标位置
+    scroller.scrollTo({
+      top: targetScrollTop,
+      behavior: 'smooth'
+    })
+
+    // 更新进度条位置
+    scrollProgress.value = clickProgress
+
+    // 计算并更新当前时间显示
+    const totalPeriods = photoPeriods.value.length
+    if (totalPeriods > 0) {
+      const periodIndex = Math.floor(clickProgress * totalPeriods)
+      const safeIndex = Math.max(0, Math.min(totalPeriods - 1, periodIndex))
+      const period = photoPeriods.value[safeIndex]
+
+      const periodProgress = (clickProgress * totalPeriods) - periodIndex
+      const dayInMonth = Math.floor(periodProgress * 30) + 1
+      const [year, month] = period.period.split('-')
+      currentViewTime.value = `${year}年${parseInt(month)}月${Math.min(dayInMonth, 30)}日`
+    }
+  }
+}
+
 // 窗口大小监听和响应式适配
 const updateContainerWidth = () => {
   const timeline = document.querySelector('.photos-timeline') as HTMLElement
   if (timeline) {
-    const timelineWidth = window.innerWidth <= 900 ? 0 : 50 // 小屏幕隐藏时间线
+    const timelineWidth = window.innerWidth <= 900 ? 0 : 24 // 小屏幕隐藏时间线，新的更窄宽度
     containerWidth.value = timeline.clientWidth - timelineWidth - 48 // 减去时间线宽度和内边距
   }
 }
@@ -472,7 +512,7 @@ onMounted(() => {
       const [year, month] = firstPeriod.period.split('-')
       currentViewTime.value = `${year}年${parseInt(month)}月1日`
     }
-    
+
     // 初始化容器宽度
     updateContainerWidth()
     window.addEventListener('resize', updateContainerWidth)
@@ -604,11 +644,11 @@ onUnmounted(() => {
 
 /* 右侧时间线导航 */
 .timeline-nav {
-  width: 50px;
+  width: 24px;
   background: transparent;
   border-left: none;
   position: relative;
-  padding: 20px 2px;
+  padding: 20px 4px;
   overflow: visible;
   flex-shrink: 0;
   transition: opacity 0.2s ease, background-color 0.2s ease;
@@ -618,8 +658,8 @@ onUnmounted(() => {
 
 @media (max-width: 1200px) {
   .timeline-nav {
-    width: 40px;
-    padding: 20px 1px;
+    width: 20px;
+    padding: 20px 2px;
   }
 }
 
@@ -627,15 +667,15 @@ onUnmounted(() => {
   .timeline-nav {
     display: none;
   }
-  
+
   .photos-content {
     padding: 16px;
   }
-  
+
   .photo-item {
     height: 160px;
   }
-  
+
   .period-title {
     font-size: 24px;
   }
@@ -707,7 +747,7 @@ onUnmounted(() => {
 .current-time-display {
   position: absolute;
   right: 100%;
-  margin-right: 16px;
+  margin-right: 12px;
   background: #1a73e8;
   color: white;
   padding: 4px 8px;
@@ -730,7 +770,7 @@ onUnmounted(() => {
 .hover-time-display {
   position: absolute;
   right: 100%;
-  margin-right: 16px;
+  margin-right: 12px;
   background: rgba(0, 0, 0, 0.8);
   color: white;
   padding: 4px 8px;
@@ -809,7 +849,7 @@ onUnmounted(() => {
 /* 响应式适配 */
 @media (max-width: 1024px) {
   .timeline-nav {
-    width: 40px;
+    width: 18px;
   }
 
   .photos-content {
@@ -819,7 +859,7 @@ onUnmounted(() => {
   .photo-item {
     height: 180px;
   }
-  
+
   .photos-row {
     gap: 6px;
     padding: 0 2px;
@@ -838,12 +878,12 @@ onUnmounted(() => {
   .period-title {
     font-size: 22px;
   }
-  
+
   .photos-row {
     gap: 4px;
     padding: 0 1px;
   }
-  
+
   .period-header {
     margin-bottom: 16px;
   }
@@ -861,12 +901,12 @@ onUnmounted(() => {
   .period-title {
     font-size: 20px;
   }
-  
+
   .photos-row {
     gap: 2px;
     padding: 0;
   }
-  
+
   .period-header {
     margin-bottom: 12px;
     flex-direction: column;
