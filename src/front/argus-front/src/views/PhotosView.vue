@@ -1,23 +1,35 @@
 ﻿<template>
   <div class="photos-timeline">
-    <!-- 左侧照片展示区域 -->
-    <div class="photos-content" ref="photosContentRef" @scroll="handleScroll">
-      <div
-        v-for="period in photoPeriods"
-        :key="period.id"
-        :ref="(el) => setPeriodRef(period.id, el as HTMLElement)"
-        class="photo-period"
+    <!-- 左侧照片展示区域（虚拟滚动） -->
+    <div class="photos-content" ref="photosContentRef">
+      <RecycleScroller
+        class="virtual-scroller"
+        :items="virtualItems"
+        :item-size="null"
+        key-field="id"
+        size-field="size"
+        v-slot="{ item }"
+        @scroll="handleVirtualScroll"
+        :buffer="400"
+        :prerender="10"
       >
         <!-- 时期标题 -->
-        <div class="period-header">
-          <h2 class="period-title">{{ period.displayName }}</h2>
-          <span class="photo-count">{{ period.photos.length }} 张照片</span>
+        <div 
+          v-if="item.type === 'header'" 
+          class="period-header"
+          :ref="(el) => setPeriodRef(item.periodId, el as HTMLElement)"
+        >
+          <h2 class="period-title">{{ item.period?.displayName }}</h2>
+          <span class="photo-count">{{ item.period?.photos.length }} 张照片</span>
         </div>
-
-        <!-- 照片网格 -->
-        <div class="photos-grid">
+        
+        <!-- 照片行或间距 -->
+        <div 
+          v-else-if="item.type === 'row'"
+          class="photos-row"
+        >
           <div
-            v-for="photo in period.photos"
+            v-for="photo in item.photos"
             :key="photo.id"
             class="photo-item"
             :style="{
@@ -32,15 +44,15 @@
             </div>
           </div>
         </div>
-      </div>
+      </RecycleScroller>
     </div>
 
     <!-- 右侧时间线导航 -->
-    <div 
+    <div
       class="timeline-nav"
-      :class="{ 
+      :class="{
         hovered: timelineHovered,
-        scrolling: isScrolling 
+        scrolling: isScrolling
       }"
       @mouseenter="timelineHovered = true"
       @mouseleave="timelineHovered = false"
@@ -48,21 +60,21 @@
       <div class="timeline-container">
         <!-- 时间线背景线 -->
         <div class="timeline-line"></div>
-        
+
         <!-- 进度指示器 -->
-        <div 
+        <div
           class="timeline-progress"
           :style="{ height: `${scrollProgress * 100}%` }"
         ></div>
-        
+
         <!-- 当前位置指示器 -->
-        <div 
+        <div
           class="timeline-indicator"
           :style="{ top: `${scrollProgress * 100}%` }"
         ></div>
-        
+
         <!-- 当前时间显示 -->
-        <div 
+        <div
           class="current-time-display"
           :class="{ visible: isScrolling || timelineHovered }"
           :style="{ top: `${scrollProgress * 100}%` }"
@@ -74,17 +86,17 @@
           v-for="(period, index) in photoPeriods"
           :key="period.id"
           class="timeline-node"
-          :class="{ 
+          :class="{
             active: activePeriodId === period.id,
             inactive: isScrolling && activePeriodId !== period.id
           }"
-          :style="{ 
-            top: `${(index / Math.max(photoPeriods.length - 1, 1)) * 100}%` 
+          :style="{
+            top: `${(index / Math.max(photoPeriods.length - 1, 1)) * 100}%`
           }"
           @click.stop="scrollToPeriod(period.id)"
         >
           <div class="node-dot"></div>
-          <div class="node-label">{{ period.period.split('-')[1] }}月</div>
+          <div class="node-label">{{ period.period.split('-')[0] }}年{{ period.period.split('-')[1] }}月</div>
         </div>
       </div>
 
@@ -97,7 +109,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, reactive } from 'vue'
+import { ref, onMounted, nextTick, reactive, computed } from 'vue'
+import { RecycleScroller } from 'vue-virtual-scroller'
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
 interface Photo {
   id: string
@@ -150,7 +164,8 @@ const generatePhotoPeriods = (): PhotoPeriod[] => {
   const periods: PhotoPeriod[] = []
   const now = new Date()
 
-  for (let i = 0; i < 8; i++) {
+  // 生成过去36个月的数据，模拟大量照片，总计约1万张以上
+  for (let i = 0; i < 36; i++) {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -160,7 +175,7 @@ const generatePhotoPeriods = (): PhotoPeriod[] => {
       id: period,
       period,
       displayName: `${year}年${parseInt(month)}月`,
-      photos: generatePhotos(Math.floor(Math.random() * 30) + 10),
+      photos: generatePhotos(Math.floor(Math.random() * 400) + 200), // 200-600张照片每月
     })
   }
 
@@ -192,6 +207,56 @@ const hoverTime = ref('')
 // 当前时间显示
 const currentViewTime = ref('')
 
+// 虚拟滚动数据结构：以行为单位，包含时期标题和照片行
+interface VirtualItem {
+  type: 'header' | 'row'
+  periodId: string
+  period?: PhotoPeriod
+  photos?: Photo[] // 当前行的照片
+  id: string
+  size: number
+}
+
+const virtualItems = computed<VirtualItem[]>(() => {
+  const items: VirtualItem[] = []
+  const containerWidth = 1000 // 估算容器宽度
+  const photosPerRow = Math.max(1, Math.floor(containerWidth / 164))
+  
+  photoPeriods.value.forEach(period => {
+    // 添加时期标题
+    items.push({
+      type: 'header',
+      periodId: period.id,
+      period,
+      id: `header-${period.id}`,
+      size: 80 // 标题固定高度
+    })
+    
+    // 将照片分割成行
+    for (let i = 0; i < period.photos.length; i += photosPerRow) {
+      const rowPhotos = period.photos.slice(i, i + photosPerRow)
+      items.push({
+        type: 'row',
+        periodId: period.id,
+        photos: rowPhotos,
+        id: `row-${period.id}-${Math.floor(i / photosPerRow)}`,
+        size: 212 // 照片行高度200px + 间距12px
+      })
+    }
+    
+    // 添加时期底部间距
+    items.push({
+      type: 'row',
+      periodId: period.id,
+      photos: [],
+      id: `spacer-${period.id}`,
+      size: 48 // 底部间距
+    })
+  })
+  
+  return items
+})
+
 // 设置时期元素引用
 const setPeriodRef = (periodId: string, el: HTMLElement) => {
   if (el) {
@@ -202,7 +267,7 @@ const setPeriodRef = (periodId: string, el: HTMLElement) => {
 // 滚动处理
 const handleScroll = () => {
   if (!photosContentRef.value) return
-  
+
   // 滚动状态管理
   isScrolling.value = true
   clearTimeout(scrollTimeout)
@@ -214,7 +279,7 @@ const handleScroll = () => {
   const containerHeight = photosContentRef.value.clientHeight
   const scrollHeight = photosContentRef.value.scrollHeight
   const viewportCenter = scrollTop + containerHeight / 2
-  
+
   // 计算滚动进度 (0-1)
   scrollProgress.value = Math.min(scrollTop / (scrollHeight - containerHeight), 1)
 
@@ -229,7 +294,7 @@ const handleScroll = () => {
       if (viewportCenter >= periodTop && viewportCenter < periodBottom) {
         activePeriodId.value = period.id
         currentPeriod = period
-        
+
         // 计算期间内的进度，推算具体日期
         const periodProgress = (viewportCenter - periodTop) / periodEl.offsetHeight
         const dayInMonth = Math.floor(periodProgress * 30) + 1
@@ -239,7 +304,7 @@ const handleScroll = () => {
       }
     }
   }
-  
+
   // 如果没有找到精确匹配，使用第一个或最后一个时期
   if (!currentPeriod && photoPeriods.value.length > 0) {
     const firstPeriod = photoPeriods.value[0]
@@ -254,15 +319,58 @@ const handleScroll = () => {
   }
 }
 
+// 虚拟滚动事件处理
+const handleVirtualScroll = (event: Event) => {
+  const target = event.target as HTMLElement
+  if (!target) return
+
+  // 滚动状态管理
+  isScrolling.value = true
+  clearTimeout(scrollTimeout)
+  scrollTimeout = setTimeout(() => {
+    isScrolling.value = false
+  }, 150)
+
+  const scrollTop = target.scrollTop
+  const containerHeight = target.clientHeight
+  const scrollHeight = target.scrollHeight
+
+  // 计算滚动进度 (0-1)
+  scrollProgress.value = Math.min(scrollTop / (scrollHeight - containerHeight), 1)
+
+  // 基于虚拟滚动位置估算当前时期
+  const totalItems = virtualItems.value.length
+  const visibleIndex = Math.floor((scrollTop / scrollHeight) * totalItems)
+  const currentItem = virtualItems.value[visibleIndex]
+
+  if (currentItem) {
+    activePeriodId.value = currentItem.periodId
+    // 根据当前项找到对应的时期
+    const period = photoPeriods.value.find(p => p.id === currentItem.periodId)
+    if (period) {
+      const [year, month] = period.period.split('-')
+      const dayInMonth = Math.floor(Math.random() * 28) + 1
+      currentViewTime.value = `${year}年${parseInt(month)}月${dayInMonth}日`
+    }
+  }
+}
+
 // 跳转到指定时期
 const scrollToPeriod = (periodId: string) => {
-  const periodEl = periodRefs[periodId]
-  if (periodEl && photosContentRef.value) {
-    const offsetTop = periodEl.offsetTop - 20 // 留一些边距
-    photosContentRef.value.scrollTo({
-      top: offsetTop,
-      behavior: 'smooth',
-    })
+  // 在虚拟列表中查找目标时期的标题索引
+  const targetIndex = virtualItems.value.findIndex(item =>
+    item.type === 'header' && item.periodId === periodId
+  )
+
+  if (targetIndex >= 0) {
+    const scroller = document.querySelector('.virtual-scroller') as HTMLElement
+    if (scroller) {
+      const scrollTop = (targetIndex / virtualItems.value.length) * scroller.scrollHeight
+      scroller.scrollTo({
+        top: scrollTop,
+        behavior: 'smooth'
+      })
+    }
     activePeriodId.value = periodId
   }
 }
@@ -314,7 +422,7 @@ onMounted(() => {
   overflow-y: auto;
   overflow-x: hidden;
   scroll-behavior: smooth;
-  
+
   /* 隐藏滚动条 */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE/Edge */
@@ -349,13 +457,18 @@ onMounted(() => {
   color: var(--text-color-secondary);
 }
 
-/* 照片网格 */
-.photos-grid {
+/* 虚拟滚动容器 */
+.virtual-scroller {
+  height: 100%;
+  width: 100%;
+}
+
+/* 照片行 */
+.photos-row {
   display: flex;
-  flex-wrap: wrap;
   gap: 4px;
-  margin-bottom: 32px;
   align-items: flex-start;
+  margin-bottom: 4px;
 }
 
 .photo-item {
@@ -396,16 +509,16 @@ onMounted(() => {
 
 /* 右侧时间线导航 */
 .timeline-nav {
-  width: 80px;
+  width: 50px;
   background: transparent;
   border-left: none;
   position: relative;
-  padding: 20px 8px;
+  padding: 20px 2px;
   overflow: visible;
   flex-shrink: 0;
   transition: opacity 0.2s ease, background-color 0.2s ease;
   opacity: 0.3;
-  cursor: crosshair;
+  cursor: row-resize;
 }
 
 .timeline-nav:hover,
@@ -512,7 +625,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  cursor: pointer;
   transition: all 0.3s ease;
   padding: 8px 0;
   opacity: 0.6;
@@ -617,7 +729,7 @@ onMounted(() => {
 /* 响应式适配 */
 @media (max-width: 1024px) {
   .timeline-nav {
-    width: 60px;
+    width: 40px;
   }
 
   .photos-content {
@@ -673,7 +785,7 @@ onMounted(() => {
     padding: 16px;
     height: calc(100% - 60px);
   }
-  
+
   .current-time-display {
     display: none;
   }
