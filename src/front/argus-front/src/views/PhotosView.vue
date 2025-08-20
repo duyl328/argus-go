@@ -57,6 +57,7 @@
       }"
       @mouseenter="timelineHovered = true"
       @mouseleave="timelineHovered = false"
+      @mousemove="handleTimelineHover"
     >
       <div class="timeline-container">
         <!-- 时间线背景线 -->
@@ -83,21 +84,13 @@
           {{ currentViewTime }}
         </div>
 
+        <!-- 悬停时间显示 -->
         <div
-          v-for="(period, index) in photoPeriods"
-          :key="period.id"
-          class="timeline-node"
-          :class="{
-            active: activePeriodId === period.id,
-            inactive: isScrolling && activePeriodId !== period.id
-          }"
-          :style="{
-            top: `${(index / Math.max(photoPeriods.length - 1, 1)) * 100}%`
-          }"
-          @click.stop="scrollToPeriod(period.id)"
+          v-if="timelineHovered"
+          class="hover-time-display"
+          :style="{ top: `${hoverTimePosition}%` }"
         >
-          <div class="node-dot"></div>
-          <div class="node-label">{{ period.period.split('-')[0] }}年{{ period.period.split('-')[1] }}月</div>
+          {{ hoverTimeText }}
         </div>
       </div>
 
@@ -110,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, reactive, computed } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, reactive, computed } from 'vue'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
@@ -199,6 +192,10 @@ const timelineHovered = ref(false)
 const isScrolling = ref(false)
 let scrollTimeout: number
 
+// 悬停时间显示
+const hoverTimePosition = ref(0)
+const hoverTimeText = ref('')
+
 // 连续进度条状态
 const scrollProgress = ref(0)
 const timelineHoverY = ref(0)
@@ -218,10 +215,23 @@ interface VirtualItem {
   size: number
 }
 
+// 响应式容器宽度
+const containerWidth = ref(1200)
+
 const virtualItems = computed<VirtualItem[]>(() => {
   const items: VirtualItem[] = []
-  const containerWidth = 1000 // 估算容器宽度
-  const photosPerRow = Math.max(1, Math.floor(containerWidth / 164))
+  // 响应式调整每行照片数量
+  let photosPerRow: number
+  if (containerWidth.value >= 1400) {
+    photosPerRow = Math.floor(containerWidth.value / 172) // 大屏幕
+  } else if (containerWidth.value >= 1200) {
+    photosPerRow = Math.floor(containerWidth.value / 180) // 中屏幕，稍微紧凑
+  } else if (containerWidth.value >= 900) {
+    photosPerRow = Math.floor(containerWidth.value / 190) // 小屏幕，更紧凑
+  } else {
+    photosPerRow = Math.max(2, Math.floor(containerWidth.value / 200)) // 移动端最少2列
+  }
+  photosPerRow = Math.max(1, photosPerRow)
   
   photoPeriods.value.forEach(period => {
     // 添加时期标题
@@ -241,7 +251,7 @@ const virtualItems = computed<VirtualItem[]>(() => {
         periodId: period.id,
         photos: rowPhotos,
         id: `row-${period.id}-${Math.floor(i / photosPerRow)}`,
-        size: 212 // 照片行高度200px + 间距12px
+        size: isMobile.value ? 152 : isTablet.value ? 192 : 216 // 响应式行高度
       })
     }
     
@@ -251,7 +261,7 @@ const virtualItems = computed<VirtualItem[]>(() => {
       periodId: period.id,
       photos: [],
       id: `spacer-${period.id}`,
-      size: 48 // 底部间距
+      size: 32 // 底部间距
     })
   })
   
@@ -414,6 +424,44 @@ const hideTooltip = () => {
   tooltipVisible.value = false
 }
 
+// 时间线悬停处理
+const handleTimelineHover = (event: MouseEvent) => {
+  const timelineNav = event.currentTarget as HTMLElement
+  const rect = timelineNav.getBoundingClientRect()
+  const relativeY = event.clientY - rect.top
+  const hoverProgress = Math.max(0, Math.min(1, relativeY / rect.height))
+  
+  hoverTimePosition.value = hoverProgress * 100
+  
+  // 根据悬停位置计算对应的时间
+  const totalPeriods = photoPeriods.value.length
+  if (totalPeriods > 0) {
+    const periodIndex = Math.floor(hoverProgress * totalPeriods)
+    const safeIndex = Math.max(0, Math.min(totalPeriods - 1, periodIndex))
+    const period = photoPeriods.value[safeIndex]
+    
+    // 在时期内计算具体日期
+    const periodProgress = (hoverProgress * totalPeriods) - periodIndex
+    const dayInMonth = Math.floor(periodProgress * 30) + 1
+    const [year, month] = period.period.split('-')
+    hoverTimeText.value = `${year}年${parseInt(month)}月${Math.min(dayInMonth, 30)}日`
+  }
+}
+
+// 窗口大小监听和响应式适配
+const updateContainerWidth = () => {
+  const timeline = document.querySelector('.photos-timeline') as HTMLElement
+  if (timeline) {
+    const timelineWidth = window.innerWidth <= 900 ? 0 : 50 // 小屏幕隐藏时间线
+    containerWidth.value = timeline.clientWidth - timelineWidth - 48 // 减去时间线宽度和内边距
+  }
+}
+
+// 响应式断点检测
+const isMobile = computed(() => containerWidth.value <= 768)
+const isTablet = computed(() => containerWidth.value > 768 && containerWidth.value <= 1024)
+const isDesktop = computed(() => containerWidth.value > 1024)
+
 // 初始化
 onMounted(() => {
   nextTick(() => {
@@ -424,7 +472,16 @@ onMounted(() => {
       const [year, month] = firstPeriod.period.split('-')
       currentViewTime.value = `${year}年${parseInt(month)}月1日`
     }
+    
+    // 初始化容器宽度
+    updateContainerWidth()
+    window.addEventListener('resize', updateContainerWidth)
   })
+})
+
+// 清理
+onUnmounted(() => {
+  window.removeEventListener('resize', updateContainerWidth)
 })
 </script>
 
@@ -482,14 +539,26 @@ onMounted(() => {
 .virtual-scroller {
   height: 100%;
   width: 100%;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.virtual-scroller::-webkit-scrollbar {
+  width: 0px !important;
+  background: transparent !important;
+}
+
+.virtual-scroller::-webkit-scrollbar-thumb {
+  background: transparent !important;
 }
 
 /* 照片行 */
 .photos-row {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   align-items: flex-start;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  padding: 0 4px;
 }
 
 /* 填充宽度的照片行 */
@@ -545,6 +614,31 @@ onMounted(() => {
   transition: opacity 0.2s ease, background-color 0.2s ease;
   opacity: 0.3;
   cursor: row-resize;
+}
+
+@media (max-width: 1200px) {
+  .timeline-nav {
+    width: 40px;
+    padding: 20px 1px;
+  }
+}
+
+@media (max-width: 900px) {
+  .timeline-nav {
+    display: none;
+  }
+  
+  .photos-content {
+    padding: 16px;
+  }
+  
+  .photo-item {
+    height: 160px;
+  }
+  
+  .period-title {
+    font-size: 24px;
+  }
 }
 
 .timeline-nav:hover,
@@ -633,6 +727,38 @@ onMounted(() => {
   opacity: 1;
 }
 
+.hover-time-display {
+  position: absolute;
+  right: 100%;
+  margin-right: 16px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 11;
+  transform: translateY(-50%);
+  opacity: 0.9;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+}
+
+.hover-time-display::after {
+  content: '';
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-left: 6px solid rgba(0, 0, 0, 0.8);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transform: translateY(-50%);
+}
+
 .current-time-display::after {
   content: '';
   position: absolute;
@@ -646,78 +772,6 @@ onMounted(() => {
   transform: translateY(-50%);
 }
 
-.timeline-node {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  transition: all 0.3s ease;
-  padding: 8px 0;
-  opacity: 0.6;
-  z-index: 4;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.timeline-node.inactive {
-  opacity: 0.1;
-  transform: translateX(-50%) scale(0.6);
-}
-
-.node-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.3);
-  border: none;
-  transition: all 0.3s ease;
-  position: relative;
-  margin-bottom: 2px;
-}
-
-.timeline-nav:hover .node-dot {
-  width: 6px;
-  height: 6px;
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.timeline-node.active .node-dot {
-  width: 6px;
-  height: 6px;
-  background: #1a73e8;
-}
-
-.timeline-node:hover .node-dot {
-  width: 8px;
-  height: 8px;
-  background: #1a73e8;
-}
-
-.node-label {
-  font-size: 9px;
-  color: rgba(0, 0, 0, 0.4);
-  font-weight: 400;
-  text-align: center;
-  transition: all 0.3s ease;
-  opacity: 0;
-  white-space: nowrap;
-}
-
-.timeline-nav:hover .node-label {
-  opacity: 0.8;
-  font-size: 10px;
-}
-
-.timeline-node:hover .node-label {
-  color: #1a73e8;
-  opacity: 1;
-}
-
-.timeline-node.active .node-label {
-  color: #1a73e8;
-  font-weight: 500;
-  opacity: 0.9;
-}
 
 /* 悬停时间提示 */
 .timeline-hover-tooltip {
@@ -763,57 +817,18 @@ onMounted(() => {
   }
 
   .photo-item {
-    height: 160px;
+    height: 180px;
+  }
+  
+  .photos-row {
+    gap: 6px;
+    padding: 0 2px;
   }
 }
 
 @media (max-width: 768px) {
-  .photos-timeline {
-    flex-direction: column;
-  }
-
-  .timeline-nav {
-    width: 100%;
-    height: 60px;
-    border-left: none;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    padding: 8px 16px;
-  }
-
-  .timeline-container {
-    flex-direction: row;
-    justify-content: space-around;
-    min-height: auto;
-    height: 100%;
-    align-items: center;
-  }
-
-  .timeline-line {
-    left: 16px;
-    right: 16px;
-    top: 50%;
-    bottom: auto;
-    height: 1px;
-    width: auto;
-    transform: translateY(-50%);
-  }
-
-  .timeline-node {
-    padding: 4px;
-    margin-bottom: 0;
-  }
-
-  .node-label {
-    font-size: 10px;
-  }
-
   .photos-content {
-    padding: 16px;
-    height: calc(100% - 60px);
-  }
-
-  .current-time-display {
-    display: none;
+    padding: 12px;
   }
 
   .photo-item {
@@ -821,7 +836,42 @@ onMounted(() => {
   }
 
   .period-title {
-    font-size: 24px;
+    font-size: 22px;
+  }
+  
+  .photos-row {
+    gap: 4px;
+    padding: 0 1px;
+  }
+  
+  .period-header {
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .photos-content {
+    padding: 8px;
+  }
+
+  .photo-item {
+    height: 120px;
+  }
+
+  .period-title {
+    font-size: 20px;
+  }
+  
+  .photos-row {
+    gap: 2px;
+    padding: 0;
+  }
+  
+  .period-header {
+    margin-bottom: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 }
 </style>
