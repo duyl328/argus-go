@@ -27,6 +27,7 @@
         <div 
           v-else-if="item.type === 'row'"
           class="photos-row"
+          :class="{ 'fill-width': (item.photos?.length || 0) > 2 }"
         >
           <div
             v-for="photo in item.photos"
@@ -35,8 +36,8 @@
             :style="{
               backgroundColor: photo.color,
               width: `${(photo.width || 1) * 160}px`,
-              flexGrow: (photo.width || 1) * 0.1,
-              flexShrink: 1
+              flexGrow: (item.photos?.length || 0) > 2 ? (photo.width || 1) * 0.3 : 0,
+              flexShrink: (item.photos?.length || 0) > 2 ? 1 : 0
             }"
           >
             <div class="photo-placeholder">
@@ -338,15 +339,23 @@ const handleVirtualScroll = (event: Event) => {
   // 计算滚动进度 (0-1)
   scrollProgress.value = Math.min(scrollTop / (scrollHeight - containerHeight), 1)
 
-  // 基于虚拟滚动位置估算当前时期
-  const totalItems = virtualItems.value.length
-  const visibleIndex = Math.floor((scrollTop / scrollHeight) * totalItems)
-  const currentItem = virtualItems.value[visibleIndex]
-
-  if (currentItem) {
-    activePeriodId.value = currentItem.periodId
-    // 根据当前项找到对应的时期
-    const period = photoPeriods.value.find(p => p.id === currentItem.periodId)
+  // 更精确地查找当前可见的时期
+  let accumulatedHeight = 0
+  let currentPeriodId = ''
+  const viewportCenter = scrollTop + containerHeight / 2
+  
+  for (const item of virtualItems.value) {
+    if (accumulatedHeight + item.size > viewportCenter) {
+      currentPeriodId = item.periodId
+      break
+    }
+    accumulatedHeight += item.size
+  }
+  
+  if (currentPeriodId && currentPeriodId !== activePeriodId.value) {
+    activePeriodId.value = currentPeriodId
+    // 根据当前时期更新时间显示
+    const period = photoPeriods.value.find(p => p.id === currentPeriodId)
     if (period) {
       const [year, month] = period.period.split('-')
       const dayInMonth = Math.floor(Math.random() * 28) + 1
@@ -365,13 +374,25 @@ const scrollToPeriod = (periodId: string) => {
   if (targetIndex >= 0) {
     const scroller = document.querySelector('.virtual-scroller') as HTMLElement
     if (scroller) {
-      const scrollTop = (targetIndex / virtualItems.value.length) * scroller.scrollHeight
+      // 计算精确的滚动位置：累计前面所有项的高度
+      let accumulatedHeight = 0
+      for (let i = 0; i < targetIndex; i++) {
+        accumulatedHeight += virtualItems.value[i].size
+      }
+      
       scroller.scrollTo({
-        top: scrollTop,
+        top: accumulatedHeight,
         behavior: 'smooth'
       })
+      
+      // 同步更新状态
+      activePeriodId.value = periodId
+      
+      // 立即更新进度条位置
+      const scrollHeight = scroller.scrollHeight - scroller.clientHeight
+      const newProgress = Math.min(accumulatedHeight / scrollHeight, 1)
+      scrollProgress.value = newProgress
     }
-    activePeriodId.value = periodId
   }
 }
 
@@ -469,6 +490,11 @@ onMounted(() => {
   gap: 4px;
   align-items: flex-start;
   margin-bottom: 4px;
+}
+
+/* 填充宽度的照片行 */
+.photos-row.fill-width {
+  justify-content: stretch;
 }
 
 .photo-item {
