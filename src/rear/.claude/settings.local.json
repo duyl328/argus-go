@@ -12,7 +12,9 @@
       "Bash(mv:*)",
       "Bash(rm:*)",
       "Bash(go test:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(del \"D:\\go-argus\\src\\rear\\api_tests.http\")",
+      "Bash(curl:*)"
     ],
     "deny": []
   }

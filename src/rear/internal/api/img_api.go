@@ -319,7 +319,7 @@ func (api *ImageAPI) convertOtherToTarget(ctx context.Context, outputPath string
 // generateThumbnail 生成缩略图
 func (api *ImageAPI) generateThumbnail(ctx context.Context, sourcePath string, longSide int) (string, error) {
 	// 获取缩略图路径
-	thumbnailPath := api.getThumbnailPath(longSide)
+	thumbnailPath := api.GetThumbnailPath(longSide)
 
 	// 检查缩略图是否已存在
 	if utils.FileUtils.Exists(thumbnailPath) {
@@ -349,8 +349,8 @@ func (api *ImageAPI) generateThumbnail(ctx context.Context, sourcePath string, l
 	return api.generateStandardThumbnail(ctx, sourcePath, thumbnailPath, targetWidth, targetHeight)
 }
 
-// getThumbnailPath 获取缩略图路径
-func (api *ImageAPI) getThumbnailPath(longSide int) string {
+// GetThumbnailPath 获取缩略图路径（公开方法）
+func (api *ImageAPI) GetThumbnailPath(longSide int) string {
 	// 使用与 main.go createCachePath 相同的逻辑构建完整缩略图路径
 	thumbnailPath := filepath.Join(config.CONFIG.AppDir, config.CONFIG.PathConfig.CachePath, config.CONFIG.PathConfig.ThumbnailPath)
 

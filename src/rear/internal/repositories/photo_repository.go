@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"errors"
 	"math"
 	"os"
@@ -26,9 +27,22 @@ func NewPhotoRepository() *PhotoRepository {
 	}
 }
 
-// Create 创建照片记录
+// Create 创建照片记录（同步）
 func (r *PhotoRepository) Create(photo *tables.Photo) error {
 	return r.db.Create(photo).Error
+}
+
+// CreateAsync 异步创建照片记录
+func (r *PhotoRepository) CreateAsync(ctx context.Context, photo *tables.Photo) error {
+	task := &db.PhotoCreateTask{Photo: photo}
+	callback := db.TaskCallback{}
+	return db.GetManger().SubmitWriteTask(task, callback)
+}
+
+// CreateAsyncSync 同步等待异步创建照片记录
+func (r *PhotoRepository) CreateAsyncSync(ctx context.Context, photo *tables.Photo) error {
+	task := &db.PhotoCreateTask{Photo: photo}
+	return db.GetManger().SubmitWriteTaskSync(ctx, task)
 }
 
 // GetByHash 根据Hash获取照片信息
@@ -41,14 +55,40 @@ func (r *PhotoRepository) GetByHash(hash string) (*tables.Photo, error) {
 	return &photo, nil
 }
 
-// Update 更新照片记录
+// Update 更新照片记录（同步）
 func (r *PhotoRepository) Update(photo *tables.Photo) error {
 	return r.db.Save(photo).Error
 }
 
-// Delete 删除照片记录
+// UpdateAsync 异步更新照片记录
+func (r *PhotoRepository) UpdateAsync(ctx context.Context, photo *tables.Photo) error {
+	task := &db.PhotoUpdateTask{Photo: photo}
+	callback := db.TaskCallback{}
+	return db.GetManger().SubmitWriteTask(task, callback)
+}
+
+// UpdateAsyncSync 同步等待异步更新照片记录
+func (r *PhotoRepository) UpdateAsyncSync(ctx context.Context, photo *tables.Photo) error {
+	task := &db.PhotoUpdateTask{Photo: photo}
+	return db.GetManger().SubmitWriteTaskSync(ctx, task)
+}
+
+// Delete 删除照片记录（同步）
 func (r *PhotoRepository) Delete(hash string) error {
 	return r.db.Where("hash = ?", hash).Delete(&tables.Photo{}).Error
+}
+
+// DeleteAsync 异步删除照片记录
+func (r *PhotoRepository) DeleteAsync(ctx context.Context, hash string) error {
+	task := &db.PhotoDeleteTask{Hash: hash}
+	callback := db.TaskCallback{}
+	return db.GetManger().SubmitWriteTask(task, callback)
+}
+
+// DeleteAsyncSync 同步等待异步删除照片记录
+func (r *PhotoRepository) DeleteAsyncSync(ctx context.Context, hash string) error {
+	task := &db.PhotoDeleteTask{Hash: hash}
+	return db.GetManger().SubmitWriteTaskSync(ctx, task)
 }
 
 // Exists 检查照片记录是否存在
@@ -58,18 +98,33 @@ func (r *PhotoRepository) Exists(hash string) (bool, error) {
 	return count > 0, err
 }
 
-// CreateOrUpdate 创建或更新照片记录
+// CreateOrUpdate 创建或更新照片记录（同步）
 func (r *PhotoRepository) CreateOrUpdate(photo *tables.Photo) error {
 	// 先检查是否存在
 	exists, err := r.Exists(photo.Hash)
 	if err != nil {
 		return err
 	}
-	
+
 	if exists {
 		return r.Update(photo)
 	} else {
 		return r.Create(photo)
+	}
+}
+
+// CreateOrUpdateAsync 异步创建或更新照片记录
+func (r *PhotoRepository) CreateOrUpdateAsync(ctx context.Context, photo *tables.Photo) error {
+	// 先检查是否存在
+	exists, err := r.Exists(photo.Hash)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		return r.UpdateAsync(ctx, photo)
+	} else {
+		return r.CreateAsync(ctx, photo)
 	}
 }
 
@@ -128,7 +183,7 @@ func (r *PhotoRepository) GetPhotosBySize(minSize, maxSize int64, limit int, off
 // GetPhotosByDimensions 根据尺寸范围获取照片
 func (r *PhotoRepository) GetPhotosByDimensions(minWidth, maxWidth, minHeight, maxHeight int, limit int, offset int) ([]*tables.Photo, error) {
 	var photos []*tables.Photo
-	err := r.db.Where("width BETWEEN ? AND ? AND height BETWEEN ? AND ?", 
+	err := r.db.Where("width BETWEEN ? AND ? AND height BETWEEN ? AND ?",
 		minWidth, maxWidth, minHeight, maxHeight).
 		Limit(limit).
 		Offset(offset).
@@ -171,7 +226,7 @@ func (r *PhotoRepository) UpdateViewCount(hash string) error {
 func (r *PhotoRepository) CreatePhotoFromImageAPI(hash, imgPath string, exifData interface{}) *tables.Photo {
 	// 提取文件名
 	imgName := filepath.Base(imgPath)
-	
+
 	// 提取文件格式
 	format := strings.ToLower(filepath.Ext(imgPath))
 	if format != "" && format[0] == '.' {
@@ -179,28 +234,33 @@ func (r *PhotoRepository) CreatePhotoFromImageAPI(hash, imgPath string, exifData
 	}
 
 	photo := &tables.Photo{
-		ImgPath: imgPath,
-		ImgName: imgName,
-		Hash:    hash,
-		Format:  format,
-		Rating:  0,
+		ImgPath:   imgPath,
+		ImgName:   imgName,
+		Hash:      hash,
+		Format:    format,
+		Rating:    0,
 		ViewCount: 0,
 	}
 
-	// 获取文件信息以获取修改时间
+	// 获取文件信息以获取修改时间和文件大小
 	if fileInfo, err := os.Stat(imgPath); err == nil {
 		fileModTime := fileInfo.ModTime()
 		photo.LastModified = &fileModTime
+
+		// 如果没有EXIF数据，至少设置文件大小
+		if photo.FileSize == 0 {
+			photo.FileSize = fileInfo.Size()
+		}
 	}
 
 	// 如果有EXIF数据，提取基础信息和时间信息
 	if exifData != nil {
-		if parsedExif, ok := exifData.(*model.ParsedExif); ok {
+		if parsedExif, ok := exifData.(*model.ParsedExif); ok && parsedExif != nil {
 			// 设置基础图片信息
 			photo.Width = parsedExif.BaseInfo.ImageWidth
 			photo.Height = parsedExif.BaseInfo.ImageHeight
 			photo.FileSize = parsedExif.BaseInfo.FileSize
-			
+
 			// 计算宽高比（保留2位小数）
 			if photo.Height > 0 {
 				ratio := float64(photo.Width) / float64(photo.Height)
@@ -209,19 +269,19 @@ func (r *PhotoRepository) CreatePhotoFromImageAPI(hash, imgPath string, exifData
 
 			// 处理拍摄时间 - 优先使用EXIF中的拍摄时间，如果没有则使用文件修改时间
 			var takenAt *time.Time
-			
+
 			// 尝试解析EXIF中的拍摄时间
 			if parsedExif.Exif.DateTimeOrig != "" {
 				if parsedTime, err := parseExifDateTime(parsedExif.Exif.DateTimeOrig); err == nil {
 					takenAt = &parsedTime
 				}
 			}
-			
+
 			// 如果EXIF中没有拍摄时间，使用文件修改时间
 			if takenAt == nil && photo.LastModified != nil {
 				takenAt = photo.LastModified
 			}
-			
+
 			photo.TakenAt = takenAt
 
 			// 处理文件创建时间
@@ -241,17 +301,17 @@ func (r *PhotoRepository) CreatePhotoFromImageAPI(hash, imgPath string, exifData
 func parseExifDateTime(dateTimeStr string) (time.Time, error) {
 	// 常见的EXIF时间格式
 	formats := []string{
-		"2006:01:02 15:04:05",           // 标准EXIF格式
-		"2006:01:02 15:04:05-07:00",     // 带时区
-		"2006:01:02 15:04:05+07:00",     // 带时区
-		"2006-01-02 15:04:05",           // ISO格式
-		"2006-01-02T15:04:05Z",          // ISO格式带Z
-		"2006-01-02T15:04:05-07:00",     // ISO格式带时区
+		"2006:01:02 15:04:05",       // 标准EXIF格式
+		"2006:01:02 15:04:05-07:00", // 带时区
+		"2006:01:02 15:04:05+07:00", // 带时区
+		"2006-01-02 15:04:05",       // ISO格式
+		"2006-01-02T15:04:05Z",      // ISO格式带Z
+		"2006-01-02T15:04:05-07:00", // ISO格式带时区
 	}
-	
+
 	// 替换EXIF格式中的冒号为横线（年月日部分）
 	normalizedStr := strings.Replace(dateTimeStr, ":", "-", 2)
-	
+
 	// 尝试不同的格式
 	for _, format := range formats {
 		if t, err := time.Parse(format, dateTimeStr); err == nil {
@@ -261,7 +321,7 @@ func parseExifDateTime(dateTimeStr string) (time.Time, error) {
 			return t, nil
 		}
 	}
-	
+
 	// 如果都解析失败，返回错误
 	return time.Time{}, errors.New("unable to parse datetime string: " + dateTimeStr)
 }
@@ -316,4 +376,79 @@ func (r *PhotoRepository) GetPhotosWithoutTakenDate(limit int, offset int) ([]*t
 		Offset(offset).
 		Find(&photos).Error
 	return photos, err
+}
+
+// PhotoTimelineItem 时间线统计项
+type PhotoTimelineItem struct {
+	Date  string `json:"date"`
+	Count int64  `json:"count"`
+}
+
+// GetPhotoTimeline 获取照片时间线统计（按拍摄日期）
+func (r *PhotoRepository) GetPhotoTimeline() ([]PhotoTimelineItem, error) {
+	var results []PhotoTimelineItem
+
+	// 使用DATE函数按日期分组统计
+	err := r.db.Model(&tables.Photo{}).
+		Select("DATE(taken_at) as date, COUNT(*) as count").
+		Where("taken_at IS NOT NULL").
+		Group("DATE(taken_at)").
+		Order("date ASC").
+		Scan(&results).Error
+
+	return results, err
+}
+
+// GetPhotoTimelineByDateRange 获取指定时间范围的照片时间线统计
+func (r *PhotoRepository) GetPhotoTimelineByDateRange(startDate, endDate time.Time) ([]PhotoTimelineItem, error) {
+	var results []PhotoTimelineItem
+
+	err := r.db.Model(&tables.Photo{}).
+		Select("DATE(taken_at) as date, COUNT(*) as count").
+		Where("taken_at IS NOT NULL AND DATE(taken_at) BETWEEN DATE(?) AND DATE(?)", startDate, endDate).
+		Group("DATE(taken_at)").
+		Order("date ASC").
+		Scan(&results).Error
+
+	return results, err
+}
+
+// PhotoListItem 照片列表项（用于前端渲染框架）
+type PhotoListItem struct {
+	Hash        string     `json:"hash"`
+	Width       int        `json:"width"`
+	Height      int        `json:"height"`
+	AspectRatio float32    `json:"aspectRatio"`
+	Format      string     `json:"format"`
+	TakenAt     *time.Time `json:"takenAt,omitempty"`
+	FileSize    int64      `json:"fileSize"`
+}
+
+// GetPhotoListItems 获取照片列表项（支持范围查询）
+func (r *PhotoRepository) GetPhotoListItems(limit int, offset int) ([]PhotoListItem, error) {
+	var items []PhotoListItem
+
+	err := r.db.Model(&tables.Photo{}).
+		Select("hash, width, height, aspect_ratio, format, taken_at, file_size").
+		Order("taken_at DESC, created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Scan(&items).Error
+
+	return items, err
+}
+
+// GetPhotoListItemsByDateRange 根据拍摄时间范围获取照片列表项
+func (r *PhotoRepository) GetPhotoListItemsByDateRange(startDate, endDate time.Time, limit int, offset int) ([]PhotoListItem, error) {
+	var items []PhotoListItem
+
+	err := r.db.Model(&tables.Photo{}).
+		Select("hash, width, height, aspect_ratio, format, taken_at, file_size").
+		Where("taken_at IS NOT NULL AND DATE(taken_at) BETWEEN DATE(?) AND DATE(?)", startDate, endDate).
+		Order("taken_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Scan(&items).Error
+
+	return items, err
 }

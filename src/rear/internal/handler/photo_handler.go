@@ -2,16 +2,14 @@ package handler
 
 import (
 	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
+	"rear/internal/api"
 	"rear/internal/config"
 	"rear/internal/container"
+	"rear/internal/db"
 	"rear/internal/model"
-	"rear/internal/model/tables"
+	"rear/internal/repositories"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -34,23 +32,23 @@ func NewPhotoHandler(container *container.DbContainer, imgContain *container.Tas
 // PhotoDetailResponse 图像详细信息响应
 type PhotoDetailResponse struct {
 	// Photo基础信息
-	Hash            string     `json:"hash"`
-	ImgPath         string     `json:"imgPath"`
-	ImgName         string     `json:"imgName"`
-	Width           int        `json:"width"`
-	Height          int        `json:"height"`
-	AspectRatio     float32    `json:"aspectRatio"`
-	FileSize        int64      `json:"fileSize"`
-	Format          string     `json:"format"`
-	Notes           *string    `json:"notes,omitempty"`
-	FileCreatedAt   *time.Time `json:"fileCreatedAt,omitempty"`
-	TakenAt         *time.Time `json:"takenAt,omitempty"`
-	LastModified    *time.Time `json:"lastModified,omitempty"`
-	Rating          int        `json:"rating"`
-	LastViewedAt    *time.Time `json:"lastViewedAt,omitempty"`
-	ViewCount       int        `json:"viewCount"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	UpdatedAt       time.Time  `json:"updatedAt"`
+	Hash          string     `json:"hash"`
+	ImgPath       string     `json:"imgPath"`
+	ImgName       string     `json:"imgName"`
+	Width         int        `json:"width"`
+	Height        int        `json:"height"`
+	AspectRatio   float32    `json:"aspectRatio"`
+	FileSize      int64      `json:"fileSize"`
+	Format        string     `json:"format"`
+	Notes         *string    `json:"notes,omitempty"`
+	FileCreatedAt *time.Time `json:"fileCreatedAt,omitempty"`
+	TakenAt       *time.Time `json:"takenAt,omitempty"`
+	LastModified  *time.Time `json:"lastModified,omitempty"`
+	Rating        int        `json:"rating"`
+	LastViewedAt  *time.Time `json:"lastViewedAt,omitempty"`
+	ViewCount     int        `json:"viewCount"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
 
 	// EXIF信息
 	ExifInfo *PhotoExifInfo `json:"exifInfo,omitempty"`
@@ -88,7 +86,7 @@ type PhotoExifInfo struct {
 }
 
 // GetPhoto 获取图像文件
-// GET api/v1/photo/{hash}?format=thumbnail&size=400x400
+// GET api/v1/photo/{hash}?format=thumbnail&size=400
 func (h *PhotoHandler) GetPhoto(c *gin.Context) {
 	hash := c.Param("hash")
 	if hash == "" {
@@ -103,16 +101,6 @@ func (h *PhotoHandler) GetPhoto(c *gin.Context) {
 	format := c.DefaultQuery("format", "original") // original, thumbnail
 	sizeParam := c.Query("size")
 
-	// 解析尺寸参数
-	maxWidth, maxHeight, err := h.parseSize(sizeParam)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, model.Response{
-			Code:    http.StatusBadRequest,
-			Message: fmt.Sprintf("Invalid size parameter: %v", err),
-		})
-		return
-	}
-
 	// 查询照片信息
 	photo, err := h.container.PhotoRepo.GetByHash(hash)
 	if err != nil {
@@ -124,17 +112,47 @@ func (h *PhotoHandler) GetPhoto(c *gin.Context) {
 		return
 	}
 
-	// 更新访问计数和时间
-	if err := h.container.PhotoRepo.UpdateViewCount(hash); err != nil {
-		logger.Warn("更新访问计数失败", zap.String("hash", hash), zap.Error(err))
+	// 异步更新访问计数和时间
+	task := &db.UpdateViewCountTask{Hash: hash}
+	callback := db.TaskCallback{
+		OnError: func(taskID string, err error) {
+			logger.Warn("异步更新访问计数失败",
+				zap.String("hash", hash),
+				zap.String("taskID", taskID),
+				zap.Error(err))
+		},
+	}
+	if err := db.GetManger().SubmitWriteTask(task, callback); err != nil {
+		logger.Warn("提交更新访问计数任务失败", zap.String("hash", hash), zap.Error(err))
+	}
+
+	// 使用ImageAPI处理图像
+	imageAPI, err := api.NewImageAPI(photo.ImgPath)
+	if err != nil {
+		logger.Error("创建ImageAPI失败", zap.String("path", photo.ImgPath), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, model.Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to process image",
+		})
+		return
 	}
 
 	var imagePath string
-	
+
 	switch format {
 	case "thumbnail":
-		// 生成或获取缩略图路径
-		imagePath, err = h.getThumbnailPath(photo, maxWidth, maxHeight)
+		// 解析尺寸参数
+		size, err := h.parseSize(sizeParam)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, model.Response{
+				Code:    http.StatusBadRequest,
+				Message: fmt.Sprintf("Invalid size parameter: %v", err),
+			})
+			return
+		}
+
+		// 使用ImageAPI获取缩略图
+		imagePath, err = imageAPI.GetImagePath(size)
 		if err != nil {
 			logger.Error("获取缩略图失败", zap.String("hash", hash), zap.Error(err))
 			c.JSON(http.StatusInternalServerError, model.Response{
@@ -144,8 +162,16 @@ func (h *PhotoHandler) GetPhoto(c *gin.Context) {
 			return
 		}
 	case "original":
-		// 返回原图
-		imagePath = photo.ImgPath
+		// 使用ImageAPI获取支持的原图格式
+		imagePath, err = imageAPI.GetSupportOriginalImagePath(c.Request.Context())
+		if err != nil {
+			logger.Error("获取原图失败", zap.String("hash", hash), zap.Error(err))
+			c.JSON(http.StatusInternalServerError, model.Response{
+				Code:    http.StatusInternalServerError,
+				Message: "Failed to get original image",
+			})
+			return
+		}
 	default:
 		c.JSON(http.StatusBadRequest, model.Response{
 			Code:    http.StatusBadRequest,
@@ -154,18 +180,8 @@ func (h *PhotoHandler) GetPhoto(c *gin.Context) {
 		return
 	}
 
-	// 检查文件是否存在
-	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
-		logger.Error("图像文件不存在", zap.String("path", imagePath))
-		c.JSON(http.StatusNotFound, model.Response{
-			Code:    http.StatusNotFound,
-			Message: "Image file not found",
-		})
-		return
-	}
-
 	// 设置响应头
-	h.setImageHeaders(c, imagePath, photo.Format)
+	h.setImageHeaders(c, imagePath, imageAPI.GetFormat())
 
 	// 返回文件
 	c.File(imagePath)
@@ -262,98 +278,163 @@ func (h *PhotoHandler) GetPhotoAssets(c *gin.Context) {
 	})
 }
 
-// parseSize 解析尺寸参数
-func (h *PhotoHandler) parseSize(sizeParam string) (int, int, error) {
+// parseSize 解析尺寸参数，返回长边尺寸
+func (h *PhotoHandler) parseSize(sizeParam string) (int, error) {
 	if sizeParam == "" {
 		// 使用默认缩略图尺寸
 		defaultSize := config.GetDefaultThumbnailSize()
-		return defaultSize, defaultSize, nil
+		return defaultSize, nil
 	}
 
-	// 解析 "400x400" 格式
-	parts := strings.Split(sizeParam, "x")
-	if len(parts) != 2 {
-		return 0, 0, fmt.Errorf("invalid size format, expected WIDTHxHEIGHT")
-	}
-
-	width, err := strconv.Atoi(parts[0])
+	size, err := strconv.Atoi(sizeParam)
 	if err != nil {
-		return 0, 0, fmt.Errorf("invalid width: %v", err)
+		return 0, fmt.Errorf("invalid size parameter: %v", err)
 	}
 
-	height, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return 0, 0, fmt.Errorf("invalid height: %v", err)
+	if size <= 0 {
+		return 0, fmt.Errorf("size must be positive")
 	}
 
-	if width <= 0 || height <= 0 {
-		return 0, 0, fmt.Errorf("width and height must be positive")
-	}
-
-	return width, height, nil
+	return size, nil
 }
 
-// getThumbnailPath 获取或生成缩略图路径
-func (h *PhotoHandler) getThumbnailPath(photo *tables.Photo, maxWidth, maxHeight int) (string, error) {
-	// 构建缩略图文件名
-	// 格式: {hash}_{maxWidth}x{maxHeight}.jpg
-	thumbnailName := fmt.Sprintf("%s_%dx%d.jpg", photo.Hash, maxWidth, maxHeight)
-	
-	// 构建缩略图完整路径
-	appDir := config.CONFIG.AppDir
-	thumbnailDir := filepath.Join(appDir, config.CONFIG.PathConfig.CachePath, config.CONFIG.PathConfig.ThumbnailPath)
-	thumbnailPath := filepath.Join(thumbnailDir, thumbnailName)
+// GetTimeline 获取照片时间线统计
+// GET /api/v1/photos/timeline?start_date=2023-01-01&end_date=2023-12-31
+func (h *PhotoHandler) GetTimeline(c *gin.Context) {
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
 
-	// 检查缩略图是否已存在
-	if _, err := os.Stat(thumbnailPath); err == nil {
-		return thumbnailPath, nil
+	var timeline []repositories.PhotoTimelineItem
+	var err error
+
+	// 如果提供了时间范围参数
+	if startDateStr != "" && endDateStr != "" {
+		startDate, err1 := time.Parse("2006-01-02", startDateStr)
+		endDate, err2 := time.Parse("2006-01-02", endDateStr)
+
+		if err1 != nil || err2 != nil {
+			c.JSON(http.StatusBadRequest, model.Response{
+				Code:    http.StatusBadRequest,
+				Message: "Invalid date format. Use YYYY-MM-DD format",
+			})
+			return
+		}
+
+		timeline, err = h.container.PhotoRepo.GetPhotoTimelineByDateRange(startDate, endDate)
+	} else {
+		// 获取全部时间线数据
+		timeline, err = h.container.PhotoRepo.GetPhotoTimeline()
 	}
 
-	// 缩略图不存在，需要生成
-	err := h.generateThumbnail(photo.ImgPath, thumbnailPath, maxWidth, maxHeight)
 	if err != nil {
-		return "", fmt.Errorf("生成缩略图失败: %w", err)
+		logger.Error("获取时间线数据失败", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, model.Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to get timeline data",
+		})
+		return
 	}
 
-	return thumbnailPath, nil
+	c.JSON(http.StatusOK, model.Response{
+		Code:    http.StatusOK,
+		Message: "Success",
+		Data:    timeline,
+	})
 }
 
-// generateThumbnail 生成缩略图
-func (h *PhotoHandler) generateThumbnail(originalPath, thumbnailPath string, maxWidth, maxHeight int) error {
-	// 确保缩略图目录存在
-	thumbnailDir := filepath.Dir(thumbnailPath)
-	if err := os.MkdirAll(thumbnailDir, 0755); err != nil {
-		return fmt.Errorf("创建缩略图目录失败: %w", err)
-	}
-
-	// TODO: 这里应该调用图像处理库生成缩略图
-	// 目前先简单复制原图作为占位符
-	return h.copyFile(originalPath, thumbnailPath)
+// PhotoColumnResponse 照片列式存储响应格式
+type PhotoColumnResponse struct {
+	Hash    []string  `json:"hash"`
+	IsImage []bool    `json:"isImage"`
+	TakenAt []string  `json:"takenAt"`
+	Ratio   []float32 `json:"ratio"`
 }
 
-// copyFile 复制文件（临时方案）
-func (h *PhotoHandler) copyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
+// GetPhotos 获取照片列表（列式存储格式）
+// GET /api/v1/photos?limit=100&offset=0&start_date=2023-01-01&end_date=2023-12-31
+func (h *PhotoHandler) GetPhotos(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "50")
+	offsetStr := c.DefaultQuery("offset", "0")
+	startDateStr := c.Query("start_date")
+	endDateStr := c.Query("end_date")
 
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return err
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50
 	}
-	defer dstFile.Close()
+	if limit > 1000 { // 限制最大数量
+		limit = 1000
+	}
 
-	_, err = io.Copy(dstFile, srcFile)
-	return err
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	var photos []repositories.PhotoListItem
+
+	// 如果提供了时间范围参数
+	if startDateStr != "" && endDateStr != "" {
+		startDate, err1 := time.Parse("2006-01-02", startDateStr)
+		endDate, err2 := time.Parse("2006-01-02", endDateStr)
+
+		if err1 != nil || err2 != nil {
+			c.JSON(http.StatusBadRequest, model.Response{
+				Code:    http.StatusBadRequest,
+				Message: "Invalid date format. Use YYYY-MM-DD format",
+			})
+			return
+		}
+
+		photos, err = h.container.PhotoRepo.GetPhotoListItemsByDateRange(startDate, endDate, limit, offset)
+	} else {
+		// 获取全部照片列表
+		photos, err = h.container.PhotoRepo.GetPhotoListItems(limit, offset)
+	}
+
+	if err != nil {
+		logger.Error("获取照片列表失败", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, model.Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to get photos list",
+		})
+		return
+	}
+
+	// 转换为列式存储格式
+	columnData := PhotoColumnResponse{
+		Hash:    make([]string, len(photos)),
+		IsImage: make([]bool, len(photos)),
+		TakenAt: make([]string, len(photos)),
+		Ratio:   make([]float32, len(photos)),
+	}
+
+	for i, photo := range photos {
+		columnData.Hash[i] = photo.Hash
+		columnData.IsImage[i] = true // 所有照片都是图像
+
+		// 处理拍摄时间
+		if photo.TakenAt != nil {
+			columnData.TakenAt[i] = photo.TakenAt.Format("2006-01-02T15:04:05")
+		} else {
+			columnData.TakenAt[i] = ""
+		}
+
+		columnData.Ratio[i] = photo.AspectRatio
+	}
+
+	c.JSON(http.StatusOK, model.Response{
+		Code:    http.StatusOK,
+		Message: "Success",
+		Data:    columnData,
+	})
 }
 
 // setImageHeaders 设置图像响应头
 func (h *PhotoHandler) setImageHeaders(c *gin.Context, imagePath, format string) {
 	// 设置Content-Type
 	var contentType string
-	switch strings.ToLower(format) {
+	switch format {
 	case "jpg", "jpeg":
 		contentType = "image/jpeg"
 	case "png":
@@ -365,14 +446,13 @@ func (h *PhotoHandler) setImageHeaders(c *gin.Context, imagePath, format string)
 	default:
 		contentType = "application/octet-stream"
 	}
-	
+
 	c.Header("Content-Type", contentType)
-	
+
 	// 设置缓存头
 	c.Header("Cache-Control", "public, max-age=86400") // 缓存1天
-	c.Header("ETag", fmt.Sprintf(`"%s"`, filepath.Base(imagePath)))
-	
+
 	// 设置文件名
-	fileName := filepath.Base(imagePath)
+	fileName := fmt.Sprintf("image.%s", format)
 	c.Header("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, fileName))
 }

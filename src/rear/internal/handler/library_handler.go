@@ -204,16 +204,43 @@ func (h *LibraryHandler) LibraryIndex(c *gin.Context) {
 			fileList = append(fileList, info.Path)
 		}
 	}
-	logger.Info(fmt.Sprintf("得到的照片: %v", fileList))
+	logger.Info(fmt.Sprintf("得到的照片总数: %d", len(fileList)))
 
-	// 启动后台任务，开始处理
-	for i := range fileList {
-		file := fileList[i]
-		h.imgContain.ImgTaskManager.AddTask(file)
+	// 检查哪些文件已经在数据库中存在，过滤出需要处理的文件
+	var newFiles []string
+	skippedCount := 0
+
+	for _, file := range fileList {
+		// 检查数据库中是否已经存在该文件记录
+		_, err := h.container.PhotoRepo.GetByPath(file)
+		if err != nil {
+			// 数据库中不存在该记录，需要处理
+			newFiles = append(newFiles, file)
+		} else {
+			// 数据库中已存在该记录，跳过
+			skippedCount++
+		}
 	}
 
+	logger.Info(fmt.Sprintf("需要处理的新文件: %d, 跳过已存在的文件: %d", len(newFiles), skippedCount))
+
+	// 异步启动后台任务，开始处理新文件
+	go func() {
+		for _, file := range newFiles {
+			h.imgContain.ImgTaskManager.AddTask(file)
+		}
+		logger.Info(fmt.Sprintf("已添加 %d 个任务到处理队列", len(newFiles)))
+	}()
+
+	// 立即返回响应
 	c.JSON(http.StatusOK, model.Response{
-		Code:    http.StatusOK,
-		Message: "索引任务已启动",
+		Code: http.StatusOK,
+		Message: fmt.Sprintf("索引任务已启动，共发现 %d 个文件，其中 %d 个新文件需要处理，%d 个文件已存在跳过",
+			len(fileList), len(newFiles), skippedCount),
+		Data: map[string]interface{}{
+			"total_files":   len(fileList),
+			"new_files":     len(newFiles),
+			"skipped_files": skippedCount,
+		},
 	})
 }

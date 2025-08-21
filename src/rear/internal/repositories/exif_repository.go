@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"gorm.io/gorm"
 	"rear/internal/db"
 	"rear/internal/model/tables"
@@ -18,9 +19,22 @@ func NewExifRepository() *ExifRepository {
 	}
 }
 
-// Create 创建EXIF记录
+// Create 创建EXIF记录（同步）
 func (r *ExifRepository) Create(exif *tables.PhotoExif) error {
 	return r.db.Create(exif).Error
+}
+
+// CreateAsync 异步创建EXIF记录
+func (r *ExifRepository) CreateAsync(ctx context.Context, exif *tables.PhotoExif) error {
+	task := &db.ExifCreateTask{Exif: exif}
+	callback := db.TaskCallback{}
+	return db.GetManger().SubmitWriteTask(task, callback)
+}
+
+// CreateAsyncSync 同步等待异步创建EXIF记录
+func (r *ExifRepository) CreateAsyncSync(ctx context.Context, exif *tables.PhotoExif) error {
+	task := &db.ExifCreateTask{Exif: exif}
+	return db.GetManger().SubmitWriteTaskSync(ctx, task)
 }
 
 // GetByHash 根据Hash获取EXIF信息
@@ -33,14 +47,40 @@ func (r *ExifRepository) GetByHash(hash string) (*tables.PhotoExif, error) {
 	return &exif, nil
 }
 
-// Update 更新EXIF记录
+// Update 更新EXIF记录（同步）
 func (r *ExifRepository) Update(exif *tables.PhotoExif) error {
 	return r.db.Save(exif).Error
 }
 
-// Delete 删除EXIF记录
+// UpdateAsync 异步更新EXIF记录
+func (r *ExifRepository) UpdateAsync(ctx context.Context, exif *tables.PhotoExif) error {
+	task := &db.ExifUpdateTask{Exif: exif}
+	callback := db.TaskCallback{}
+	return db.GetManger().SubmitWriteTask(task, callback)
+}
+
+// UpdateAsyncSync 同步等待异步更新EXIF记录
+func (r *ExifRepository) UpdateAsyncSync(ctx context.Context, exif *tables.PhotoExif) error {
+	task := &db.ExifUpdateTask{Exif: exif}
+	return db.GetManger().SubmitWriteTaskSync(ctx, task)
+}
+
+// Delete 删除EXIF记录（同步）
 func (r *ExifRepository) Delete(hash string) error {
 	return r.db.Where("hash = ?", hash).Delete(&tables.PhotoExif{}).Error
+}
+
+// DeleteAsync 异步删除EXIF记录
+func (r *ExifRepository) DeleteAsync(ctx context.Context, hash string) error {
+	task := &db.ExifDeleteTask{Hash: hash}
+	callback := db.TaskCallback{}
+	return db.GetManger().SubmitWriteTask(task, callback)
+}
+
+// DeleteAsyncSync 同步等待异步删除EXIF记录
+func (r *ExifRepository) DeleteAsyncSync(ctx context.Context, hash string) error {
+	task := &db.ExifDeleteTask{Hash: hash}
+	return db.GetManger().SubmitWriteTaskSync(ctx, task)
 }
 
 // Exists 检查EXIF记录是否存在

@@ -1,0 +1,131 @@
+### Argus 照片管理系统 - 开发和调试接口测试
+### 服务器地址
+@baseUrl = http://localhost:8080
+@apiBase = {{baseUrl}}/api/v1
+
+### ===== 开发工具接口 =====
+
+### 开发工具 - 获取EXIF信息
+GET {{baseUrl}}/dev/tool/exiftool/get_exif?imagePath=D:/Pictures/sample.jpg
+
+### 开发工具 - 获取EXIF信息 (Linux路径示例)
+GET {{baseUrl}}/dev/tool/exiftool/get_exif?imagePath=/home/user/Pictures/sample.jpg
+
+### 开发工具 - 获取EXIF信息 (相对路径)
+GET {{baseUrl}}/dev/tool/exiftool/get_exif?imagePath=./examples/sample.jpg
+
+### ===== 系统状态和调试 =====
+
+### 系统信息
+GET {{baseUrl}}/dev/system/info
+
+### 内存使用情况
+GET {{baseUrl}}/dev/system/memory
+
+### 数据库连接状态
+GET {{baseUrl}}/dev/database/status
+
+### 数据库表信息
+GET {{baseUrl}}/dev/database/tables
+
+### 缓存状态
+GET {{baseUrl}}/dev/cache/status
+
+### 清理缓存
+DELETE {{baseUrl}}/dev/cache/clear
+
+### ===== 日志和监控 =====
+
+### 获取系统日志
+GET {{baseUrl}}/dev/logs?level=info&limit=100
+
+### 获取错误日志
+GET {{baseUrl}}/dev/logs?level=error&limit=50
+
+### 获取最近的处理任务
+GET {{baseUrl}}/dev/tasks/recent
+
+### 获取失败的任务
+GET {{baseUrl}}/dev/tasks/failed
+
+### ===== 测试数据生成 =====
+
+### 生成测试用户
+POST {{baseUrl}}/dev/test/users
+Content-Type: application/json
+
+{
+  "count": 5
+}
+
+### 生成测试图像记录
+POST {{baseUrl}}/dev/test/photos
+Content-Type: application/json
+
+{
+  "count": 10,
+  "with_exif": true
+}
+
+### 清理测试数据
+DELETE {{baseUrl}}/dev/test/cleanup
+
+### ===== 性能测试 =====
+
+### 数据库性能测试
+GET {{baseUrl}}/dev/benchmark/database
+
+### 图像处理性能测试
+GET {{baseUrl}}/dev/benchmark/image?size=1920x1080
+
+### EXIF解析性能测试
+GET {{baseUrl}}/dev/benchmark/exif
+
+### ===== 配置管理 =====
+
+### 获取当前配置
+GET {{baseUrl}}/dev/config
+
+### 重新加载配置
+POST {{baseUrl}}/dev/config/reload
+
+### 验证配置
+GET {{baseUrl}}/dev/config/validate
+
+### ===== 错误模拟 =====
+
+### 模拟数据库错误
+GET {{baseUrl}}/dev/simulate/db_error
+
+### 模拟文件系统错误
+GET {{baseUrl}}/dev/simulate/fs_error
+
+### 模拟内存不足
+GET {{baseUrl}}/dev/simulate/memory_error
+
+### ===== 安全测试 =====
+
+### 测试文件路径遍历
+GET {{baseUrl}}/dev/tool/exiftool/get_exif?imagePath=../../../etc/passwd
+
+### 测试SQL注入 (应该被阻止)
+GET {{apiBase}}/exif/search?q='; DROP TABLE users; --
+
+### 测试XSS (应该被转义)
+GET {{apiBase}}/exif/search?q=<script>alert('xss')</script>
+
+### ===== 使用说明 =====
+###
+### 开发接口仅用于开发和调试环境
+### 生产环境应该禁用这些接口
+### 
+### 1. 工具接口用于测试ExifTool功能
+### 2. 系统接口用于监控应用状态
+### 3. 测试数据接口用于快速生成测试环境
+### 4. 性能测试接口用于基准测试
+### 5. 安全测试用于验证安全措施
+###
+### 注意：
+### - 替换imagePath为实际存在的图像文件路径
+### - 测试数据生成会修改数据库
+### - 清理操作不可逆，请谨慎使用

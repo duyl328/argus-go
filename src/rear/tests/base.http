@@ -1,0 +1,25 @@
+### Argus 照片管理系统 - 基础功能测试
+### 服务器地址
+@baseUrl = http://localhost:8080
+@apiBase = {{baseUrl}}/api/v1
+
+### ===== 健康检查 =====
+
+### 健康检查
+GET {{baseUrl}}/health
+
+### API 基础路由
+GET {{apiBase}}
+
+### ===== 环境变量示例 =====
+### 在http-client.env.json中配置：
+### {
+###   "dev": {
+###     "baseUrl": "http://localhost:8080",
+###     "sampleHash": "your_actual_hash_here"
+###   },
+###   "prod": {
+###     "baseUrl": "https://your-production-domain.com",
+###     "sampleHash": "production_hash_here"
+###   }
+### }

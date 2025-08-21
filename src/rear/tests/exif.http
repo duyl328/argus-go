@@ -1,0 +1,116 @@
+### Argus 照片管理系统 - EXIF信息接口测试
+### 服务器地址
+@baseUrl = http://localhost:8080
+@apiBase = {{baseUrl}}/api/v1
+
+### 注意：需要先运行图像库索引获得实际的hash值
+@sampleHash = sample_hash_12345
+
+### ===== EXIF信息基础查询 =====
+
+### 获取所有EXIF记录
+GET {{apiBase}}/exif
+
+### 根据hash获取EXIF信息
+GET {{apiBase}}/exif/{{sampleHash}}
+
+### 获取EXIF统计信息
+GET {{apiBase}}/exif/statistics
+
+### ===== 相机相关查询 =====
+
+### 获取相机列表
+GET {{apiBase}}/exif/cameras
+
+### 获取相机统计
+GET {{apiBase}}/exif/cameras/stats
+
+### 根据相机品牌筛选
+GET {{apiBase}}/exif/camera?make=Canon
+
+### 根据相机型号筛选
+GET {{apiBase}}/exif/camera?model=EOS
+
+### 根据相机品牌和型号筛选
+GET {{apiBase}}/exif/camera?make=Canon&model=EOS
+
+### ===== 拍摄参数查询 =====
+
+### 根据ISO筛选
+GET {{apiBase}}/exif/iso?min=100&max=800
+
+### 根据ISO范围筛选 (高ISO)
+GET {{apiBase}}/exif/iso?min=1600&max=6400
+
+### 根据光圈筛选
+GET {{apiBase}}/exif/aperture?min=1.4&max=5.6
+
+### 根据光圈筛选 (大光圈)
+GET {{apiBase}}/exif/aperture?min=1.0&max=2.8
+
+### 根据焦距筛选
+GET {{apiBase}}/exif/focal?min=85&max=200
+
+### ===== GPS和位置信息 =====
+
+### 获取有GPS信息的照片
+GET {{apiBase}}/exif/gps
+
+### 根据GPS坐标范围筛选
+GET {{apiBase}}/exif/gps?lat_min=39.0&lat_max=40.0&lng_min=116.0&lng_max=117.0
+
+### ===== 搜索功能 =====
+
+### 搜索EXIF信息 (相机品牌)
+GET {{apiBase}}/exif/search?q=Canon
+
+### 搜索EXIF信息 (相机型号)
+GET {{apiBase}}/exif/search?q=EOS
+
+### 搜索EXIF信息 (镜头信息)
+GET {{apiBase}}/exif/search?q=85mm
+
+### ===== 高级筛选 =====
+
+### 组合查询：特定相机+ISO范围
+GET {{apiBase}}/exif?make=Canon&model=EOS&iso_min=100&iso_max=400
+
+### 组合查询：光圈+焦距范围
+GET {{apiBase}}/exif?aperture_min=2.8&aperture_max=5.6&focal_min=50&focal_max=100
+
+### 组合查询：带GPS的Canon照片
+GET {{apiBase}}/exif?make=Canon&has_gps=true
+
+### ===== 分页和排序 =====
+
+### 分页获取EXIF数据
+GET {{apiBase}}/exif?page=1&limit=20
+
+### 按拍摄时间排序
+GET {{apiBase}}/exif?sort=datetime&order=desc
+
+### 按ISO排序
+GET {{apiBase}}/exif?sort=iso&order=asc
+
+### ===== 错误测试 =====
+
+### 测试不存在的hash
+GET {{apiBase}}/exif/nonexistent_hash
+
+### 测试无效的ISO范围
+GET {{apiBase}}/exif/iso?min=abc&max=xyz
+
+### 测试无效的光圈值
+GET {{apiBase}}/exif/aperture?min=-1&max=100
+
+### 测试无效的GPS坐标
+GET {{apiBase}}/exif/gps?lat_min=invalid&lng_max=invalid
+
+### ===== 使用说明 =====
+###
+### 1. 将 {{sampleHash}} 替换为实际的图像hash
+### 2. EXIF接口返回JSON格式的详细信息
+### 3. 筛选参数可以组合使用
+### 4. 支持分页和排序功能
+### 5. GPS查询需要照片包含位置信息
+### 6. 搜索功能支持模糊匹配

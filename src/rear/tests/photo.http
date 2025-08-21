@@ -1,0 +1,74 @@
+### Argus 照片管理系统 - 照片接口测试
+### 服务器地址
+@baseUrl = http://localhost:8080
+@apiBase = {{baseUrl}}/api/v1
+
+### 注意：需要先运行图像库索引获得实际的hash值
+@sampleHash = sample_hash_12345
+
+### ===== 照片文件访问测试 =====
+
+### 获取原图
+GET {{apiBase}}/photo/{{sampleHash}}?format=original
+
+### 获取默认尺寸缩略图
+GET {{apiBase}}/photo/{{sampleHash}}?format=thumbnail
+
+### 获取指定尺寸缩略图 (400x400)
+GET {{apiBase}}/photo/{{sampleHash}}?format=thumbnail&size=400x400
+
+### 获取指定尺寸缩略图 (800x600)
+GET {{apiBase}}/photo/{{sampleHash}}?format=thumbnail&size=800x600
+
+### 获取正方形缩略图 (500x500)
+GET {{apiBase}}/photo/{{sampleHash}}?format=thumbnail&size=500x500
+
+### 获取小尺寸缩略图 (200x200)
+GET {{apiBase}}/photo/{{sampleHash}}?format=thumbnail&size=200x200
+
+### 获取高分辨率缩略图 (1920x1080)
+GET {{apiBase}}/photo/{{sampleHash}}?format=thumbnail&size=1920x1080
+
+### ===== 照片详情信息测试 =====
+
+### 获取图像详细信息
+GET {{apiBase}}/assets/{{sampleHash}}
+
+### ===== 错误测试 =====
+
+### 测试不存在的hash - 图像文件
+GET {{apiBase}}/photo/nonexistent_hash
+
+### 测试不存在的hash - 图像详情
+GET {{apiBase}}/assets/nonexistent_hash
+
+### 测试无效的格式参数
+GET {{apiBase}}/photo/{{sampleHash}}?format=invalid_format
+
+### 测试无效的尺寸参数
+GET {{apiBase}}/photo/{{sampleHash}}?format=thumbnail&size=invalid_size
+
+### 测试负数尺寸
+GET {{apiBase}}/photo/{{sampleHash}}?format=thumbnail&size=-100x-100
+
+### 测试错误的尺寸格式
+GET {{apiBase}}/photo/{{sampleHash}}?format=thumbnail&size=400x
+
+### 测试空尺寸参数
+GET {{apiBase}}/photo/{{sampleHash}}?format=thumbnail&size=
+
+### ===== 性能测试示例 =====
+
+### 并发获取缩略图测试 (可以在终端中使用curl并发执行)
+# curl "{{apiBase}}/photo/hash1?format=thumbnail&size=400x400" &
+# curl "{{apiBase}}/photo/hash2?format=thumbnail&size=400x400" &
+# curl "{{apiBase}}/photo/hash3?format=thumbnail&size=400x400" &
+
+### ===== 使用说明 =====
+###
+### 1. 将 {{sampleHash}} 替换为实际的图像hash
+### 2. 图像文件接口会返回二进制图像数据
+### 3. 详情接口会返回JSON格式的完整信息
+### 4. 错误情况会返回包含错误信息的JSON
+### 5. 缩略图生成可能需要一些时间
+### 6. API会自动更新图像的访问计数和访问时间

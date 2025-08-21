@@ -1,0 +1,159 @@
+### Argus 照片管理系统 - 用户管理接口测试
+### 服务器地址
+@baseUrl = http://localhost:8080
+@apiBase = {{baseUrl}}/api/v1
+
+### ===== 用户管理接口测试 =====
+
+### 获取所有用户
+GET {{apiBase}}/users
+
+### 获取指定用户
+GET {{apiBase}}/users/1
+
+### 创建新用户
+POST {{apiBase}}/users
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "email": "test@example.com",
+  "password": "password123",
+  "age": 25
+}
+
+### 创建新用户 (测试用户2)
+POST {{apiBase}}/users
+Content-Type: application/json
+
+{
+  "username": "photographer",
+  "email": "photo@example.com",
+  "password": "photo123",
+  "age": 30
+}
+
+### 更新用户信息
+PUT {{apiBase}}/users/1
+Content-Type: application/json
+
+{
+  "username": "updateduser",
+  "email": "updated@example.com",
+  "age": 26
+}
+
+### 更新用户密码
+PUT {{apiBase}}/users/1
+Content-Type: application/json
+
+{
+  "password": "newpassword123"
+}
+
+### 部分更新用户信息
+PATCH {{apiBase}}/users/1
+Content-Type: application/json
+
+{
+  "age": 27
+}
+
+### 删除用户
+DELETE {{apiBase}}/users/1
+
+### ===== 用户验证和认证 =====
+
+### 用户登录 (如果有认证系统)
+POST {{apiBase}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "password123"
+}
+
+### 用户注册 (如果有认证系统)
+POST {{apiBase}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "newuser",
+  "email": "new@example.com",
+  "password": "newpass123",
+  "age": 28
+}
+
+### ===== 用户查询和筛选 =====
+
+### 根据用户名搜索
+GET {{apiBase}}/users?username=test
+
+### 根据邮箱搜索
+GET {{apiBase}}/users?email=example.com
+
+### 分页获取用户
+GET {{apiBase}}/users?page=1&limit=10
+
+### 按年龄范围筛选用户
+GET {{apiBase}}/users?age_min=20&age_max=40
+
+### 按创建时间排序
+GET {{apiBase}}/users?sort=created_at&order=desc
+
+### ===== 错误测试 =====
+
+### 测试获取不存在的用户
+GET {{apiBase}}/users/999
+
+### 测试创建用户 - 缺少必需字段
+POST {{apiBase}}/users
+Content-Type: application/json
+
+{
+  "username": "incomplete"
+}
+
+### 测试创建用户 - 无效邮箱格式
+POST {{apiBase}}/users
+Content-Type: application/json
+
+{
+  "username": "testuser2",
+  "email": "invalid-email",
+  "password": "password123",
+  "age": 25
+}
+
+### 测试创建用户 - 重复用户名
+POST {{apiBase}}/users
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "email": "another@example.com", 
+  "password": "password123",
+  "age": 25
+}
+
+### 测试更新不存在的用户
+PUT {{apiBase}}/users/999
+Content-Type: application/json
+
+{
+  "username": "nonexistent",
+  "email": "none@example.com",
+  "age": 30
+}
+
+### 测试删除不存在的用户
+DELETE {{apiBase}}/users/999
+
+### ===== 使用说明 =====
+###
+### 1. 用户管理接口用于管理系统用户
+### 2. 创建用户时确保提供所有必需字段
+### 3. 邮箱地址需要符合有效格式
+### 4. 用户名在系统中应该是唯一的
+### 5. 支持分页、搜索和排序功能
+### 6. 删除用户操作不可逆，请谨慎使用

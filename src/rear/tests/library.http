@@ -1,0 +1,39 @@
+### Argus 照片管理系统 - 图像库管理测试
+### 服务器地址
+@baseUrl = http://localhost:8080
+@apiBase = {{baseUrl}}/api/v1
+
+### ===== 图像库管理 =====
+
+### 查看当前图像库
+GET {{apiBase}}/library
+
+### 添加图像库路径 (需要修改为实际存在的路径)
+POST {{apiBase}}/library
+Content-Type: application/json
+
+{
+  "path": "E:/整合/kkimkkimmy/Pic"
+}
+
+### 更新图像库状态
+PUT {{apiBase}}/library
+Content-Type: application/json
+
+{
+  "path": "E:/整合/kkimkkimmy/Pic",
+  "is_enable": true
+}
+
+### 开始图像索引 (需要先添加图像库)
+POST {{apiBase}}/library/indexed
+
+### 删除图像库
+DELETE {{apiBase}}/library?path=D:/Pictures
+
+### ===== 使用说明 =====
+###
+### 1. 首先添加图像库路径，确保路径存在且包含图像文件
+### 2. 启用图像库 (is_enable: true)
+### 3. 开始索引获得图像hash值
+### 4. 使用获得的hash值进行其他接口测试
