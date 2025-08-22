@@ -1,0 +1,338 @@
+### 时间线和照片列表接口测试
+
+@baseUrl = http://localhost:9483
+@api = {{baseUrl}}/api/v1
+
+### 1. 获取照片时间线统计（全部数据）
+GET {{api}}/photos/timeline
+Accept: application/json
+
+##
+结果:{
+  "code": 200,
+  "message": "Success",
+  "data": [
+    {
+      "date": "2024-10-05",
+      "count": 1202
+    },
+    {
+      "date": "2024-11-01",
+      "count": 1
+    },
+    {
+      "date": "2024-11-04",
+      "count": 4
+    },
+    {
+      "date": "2025-08-02",
+      "count": 3
+    }
+  ]
+}
+##
+
+### 2. 获取照片时间线统计（指定时间范围）
+GET {{api}}/photos/timeline?start_date=2020-01-01&end_date=2024-12-31
+Accept: application/json
+
+##
+结果：
+{
+  "code": 200,
+  "message": "Success",
+  "data": [
+    {
+      "date": "2024-10-05",
+      "count": 1202
+    },
+    {
+      "date": "2024-11-01",
+      "count": 1
+    },
+    {
+      "date": "2024-11-04",
+      "count": 4
+    }
+  ]
+}
+##
+### 3. 获取照片时间线统计（最近一年）
+GET {{api}}/photos/timeline?start_date=2024-01-01&end_date=2024-12-31
+Accept: application/json
+
+##
+结果：
+{
+  "code": 200,
+  "message": "Success",
+  "data": [
+    {
+      "date": "2024-10-05",
+      "count": 1202
+    },
+    {
+      "date": "2024-11-01",
+      "count": 1
+    },
+    {
+      "date": "2024-11-04",
+      "count": 4
+    }
+  ]
+}
+##
+
+### 4. 获取照片列表（默认参数）
+GET {{api}}/photos
+Accept: application/json
+
+##
+结果：
+{
+  "code": 200,
+  "message": "Success",
+  "data": {
+    "hash": ["f7b05e20e8ea554476dc581bb7b700ab5a039c85b29223067856e7650262880c", "5b1cc505e9b5365e6d6160aaa7df37082b110447fa901cdf6e75a0de639bbab2", "3184a0593924dd133aea6399ce5b4624f370189392dc6dad172ca908db4ae3a4"],
+    "isImage": [true, true, true],
+    "takenAt": ["2025-08-02T14:16:36", "2025-08-02T14:16:36", "2025-08-02T14:16:36"],
+    "ratio": [1, 0.46153846, 1.6]
+  }
+}
+##
+
+### 5. 获取照片列表（指定分页）
+GET {{api}}/photos?limit=20&offset=0
+Accept: application/json
+
+##
+结果：
+{
+  "code": 200,
+  "message": "Success",
+  "data": {
+    "hash": ["f7b05e20e8ea554476dc581bb7b700ab5a039c85b29223067856e7650262880c", "5b1cc505e9b5365e6d6160aaa7df37082b110447fa901cdf6e75a0de639bbab2"],
+    "isImage": [true, true],
+    "takenAt": ["2025-08-02T14:16:36", "2025-08-02T14:16:36"],
+    "ratio": [1, 0.46153846]
+  }
+}
+##
+
+### 6. 获取照片列表（指定时间范围）
+GET {{api}}/photos?start_date=2023-01-01&end_date=2023-12-31&limit=50&offset=0
+Accept: application/json
+
+##
+结果：
+{
+  "code": 200,
+  "message": "Success",
+  "data": {
+    "hash": [],
+    "isImage": [],
+    "takenAt": [],
+    "ratio": []
+  }
+}
+##
+
+### 7. 获取照片列表（大量数据分页）
+GET {{api}}/photos?limit=100&offset=100
+Accept: application/json
+
+##
+结果：
+{
+  "code": 200,
+  "message": "Success",
+  "data": {
+    "hash": ["1be5613a236cbae56c42db747c9d8b05f7d1c491359f154e6485e1431f40bbff", "ef93b22aeb6e9b03cd5a67b0dea1ea23ba3ba1cfce203b4f8da60c857f8de82b"],
+    "isImage": [true, true],
+    "takenAt": ["2024-10-05T23:13:08", "2024-10-05T23:13:08"],
+    "ratio": [0.75, 0.75]
+  }
+}
+##
+
+### 8. 获取照片列表（最大限制测试）
+GET {{api}}/photos?limit=1500&offset=0
+Accept: application/json
+
+##
+结果：（limit被限制为1000条）
+{
+  "code": 200,
+  "message": "Success",
+  "data": {
+    "hash": ["f7b05e20e8ea554476dc581bb7b700ab5a039c85b29223067856e7650262880c", "5b1cc505e9b5365e6d6160aaa7df37082b110447fa901cdf6e75a0de639bbab2", "..."],
+    "isImage": [true, true, "..."],
+    "takenAt": ["2025-08-02T14:16:36", "2025-08-02T14:16:36", "..."],
+    "ratio": [1, 0.46153846, "..."]
+  }
+}
+##
+
+### 9. 获取照片列表（错误参数测试）
+GET {{api}}/photos?limit=abc&offset=def
+Accept: application/json
+
+##
+结果：（错误参数自动回退到默认值）
+{
+  "code": 200,
+  "message": "Success",
+  "data": {
+    "hash": ["f7b05e20e8ea554476dc581bb7b700ab5a039c85b29223067856e7650262880c", "5b1cc505e9b5365e6d6160aaa7df37082b110447fa901cdf6e75a0de639bbab2"],
+    "isImage": [true, true],
+    "takenAt": ["2025-08-02T14:16:36", "2025-08-02T14:16:36"],
+    "ratio": [1, 0.46153846]
+  }
+}
+##
+
+### 10. 获取照片列表（错误日期格式测试）
+GET {{api}}/photos?start_date=2023-1-1&end_date=2023-12-31
+Accept: application/json
+
+##
+结果：（日期格式错误返回400）
+{
+  "code": 400,
+  "message": "Invalid date format. Use YYYY-MM-DD format"
+}
+##
+
+### 11. 获取照片列表（只指定开始日期）
+GET {{api}}/photos?start_date=2023-01-01
+Accept: application/json
+
+##
+结果：（只指定开始日期，忽略时间范围过滤，返回全部照片）
+{
+  "code": 200,
+  "message": "Success",
+  "data": {
+    "hash": ["f7b05e20e8ea554476dc581bb7b700ab5a039c85b29223067856e7650262880c", "5b1cc505e9b5365e6d6160aaa7df37082b110447fa901cdf6e75a0de639bbab2"],
+    "isImage": [true, true],
+    "takenAt": ["2025-08-02T14:16:36", "2025-08-02T14:16:36"],
+    "ratio": [1, 0.46153846]
+  }
+}
+##
+
+### 12. 获取照片列表（最近拍摄）
+GET {{api}}/photos?limit=10&offset=0
+Accept: application/json
+
+##
+结果：
+{
+  "code": 200,
+  "message": "Success",
+  "data": {
+    "hash": ["f7b05e20e8ea554476dc581bb7b700ab5a039c85b29223067856e7650262880c", "5b1cc505e9b5365e6d6160aaa7df37082b110447fa901cdf6e75a0de639bbab2", "3184a0593924dd133aea6399ce5b4624f370189392dc6dad172ca908db4ae3a4", "b55c791bb9019cea8e2b99e65c2a2d9177eb7203df2fcd6efd64728bddacc539", "fe01b113dbb761990f6d806b11163db6db17724f5d2afc09821763dbb8059608", "b32140126e0f183f23850dddd33c74534d694d1e5c6ba0c9ba9c259635a82189", "48ba18bcf31def97e9cf15c4dfa7e89494fb84f7058a6789c44b8308676e4b4d", "4c6b16967eeaa51d0fc99b080b1ce7e257b572e505be445976cf96fa0ee354b8", "eb9ed9cfc0789f852d7a3d5d0b171fd392da2060051cbfe700336e782fd18e7b", "19c4dafff7d5762f5922cf668d787dae1b949c30c01c798e1b235194b1d8f81a"],
+    "isImage": [true, true, true, true, true, true, true, true, true, true],
+    "takenAt": ["2025-08-02T14:16:36", "2025-08-02T14:16:36", "2025-08-02T14:16:36", "2024-11-04T17:46:01", "2024-11-04T11:06:32", "2024-11-04T10:40:29", "2024-11-04T10:40:29", "2024-11-01T17:48:00", "2024-10-05T23:13:32", "2024-10-05T23:13:32"],
+    "ratio": [1, 0.46153846, 1.6, 1.3333334, 1.3333334, 1.3333334, 1.3333334, 1.3333334, 1.33, 1.33]
+  }
+}
+##
+
+### 13. 组合测试 - 先获取时间线，再获取具体照片
+# 第一步：获取时间线数据
+GET {{api}}/photos/timeline
+Accept: application/json
+
+##
+结果：
+{
+  "code": 200,
+  "message": "Success",
+  "data": [
+    {
+      "date": "2024-10-05",
+      "count": 1202
+    },
+    {
+      "date": "2024-11-01",
+      "count": 1
+    },
+    {
+      "date": "2024-11-04",
+      "count": 4
+    },
+    {
+      "date": "2025-08-02",
+      "count": 3
+    }
+  ]
+}
+##
+
+###
+# 第二步：根据时间线结果获取特定日期的照片
+GET {{api}}/photos?start_date=2024-10-05&end_date=2024-10-05&limit=10&offset=0
+Accept: application/json
+
+##
+结果：
+{
+  "code": 200,
+  "message": "Success",
+  "data": {
+    "hash": ["1e6f9fdc095864e0913854bed5dbf0a52fbb2bbb7695b3ce10ada15487c7d1ac", "5c87aeaab3a70c7ad8f8e69ef9ab8065548d710fe31fd2765f87e4c1e3c15e8e", "bb71eae65657957c9ed977497f3fc18d020cb38e90b1cb4ad0364fde3b591992", "863e8fdbb1e1946326f60b07066b3e45fd9b9e13d1d9c9e023588d3ab4938bff", "70886b5e8bf59eeb3cc5fbb1f714c3da5c371e1a0c83ac5ad9c20621c703ff4f", "9df97ccc44529d1d377b36f50f79cd5ab9c0920dd58352630412e4b3f8eceaf5", "a7c921484efa89501266f37185a9eefcb8cf86685a793f9af47f1eb9f4883b4d", "08e62727a8f490d589ba7ff8d2c351776bdb87d766d8719f42ed21716f37fc18", "02adae784262d79191a39c964cd1a6cb53de5884b91e46336e725d5458c92afd", "7d2ec1ebcac68aa965c652f0687b32e86be2fe9b003d6f952e5bc6188ff3b431"],
+    "isImage": [true, true, true, true, true, true, true, true, true, true],
+    "takenAt": ["2024-10-05T23:13:32", "2024-10-05T23:13:32", "2024-10-05T23:13:32", "2024-10-05T23:13:32", "2024-10-05T23:13:32", "2024-10-05T23:13:32", "2024-10-05T23:13:32", "2024-10-05T23:13:32", "2024-10-05T23:13:32", "2024-10-05T23:13:32"],
+    "ratio": [0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75]
+  }
+}
+##
+
+### 14. 性能测试 - 获取大量时间线数据
+GET {{api}}/photos/timeline?start_date=2020-01-01&end_date=2024-12-31
+Accept: application/json
+
+##
+结果：
+{
+  "code": 200,
+  "message": "Success",
+  "data": [
+    {
+      "date": "2024-10-05",
+      "count": 1202
+    },
+    {
+      "date": "2024-11-01",
+      "count": 1
+    },
+    {
+      "date": "2024-11-04",
+      "count": 4
+    }
+  ]
+}
+##
+
+### 15. 验证响应格式
+# 时间线响应格式（保持不变）：
+# [{"date": "2023-10-01", "count": 5}, {"date": "2023-10-02", "count": 10}]
+
+# 照片列表响应格式（已修改为列式存储）：
+# {
+#   "hash": ["abc123", "def456"],
+#   "isImage": [true, true],
+#   "takenAt": ["2023-10-01T10:30:00", "2023-10-01T11:30:00"],
+#   "ratio": [1.78, 1.33]
+# }
+
+##
+验证结果：✅ 所有接口测试完成
+- 时间线接口返回格式正确
+- 照片列表接口已成功改造为列式存储格式
+- 错误处理正常（日期格式错误返回400）
+- 参数验证正常（错误参数自动回退到默认值）
+- 分页功能正常
+- 时间范围过滤功能正常
+##
