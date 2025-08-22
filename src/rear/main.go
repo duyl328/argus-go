@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.uber.org/zap"
 	"io"
 	"log"
 	"net/http"
@@ -25,6 +24,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/pprof"

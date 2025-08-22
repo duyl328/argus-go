@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"go.uber.org/zap"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // 全局变量存储工具路径
@@ -34,7 +35,7 @@ type Config struct {
 	VipsPath        string
 }
 
-// Initialize 使用配置文件初始化工具路径
+// InitializeFromConfig Initialize 使用配置文件初始化工具路径
 func InitializeFromConfig(baseDir *string) error {
 	toolsInitOnce.Do(func() {
 		// 从全局配置获取工具路径
@@ -96,7 +97,7 @@ func detectTools(baseDir *string) error {
 		}
 	}
 	if ImageMagickPath == "" {
-		return fmt.Errorf("ImageMagick not found")
+		logger.Warn("ImageMagick not found")
 	}
 
 	// 检测 ExifTool
@@ -118,7 +119,7 @@ func detectTools(baseDir *string) error {
 		}
 	}
 	if ExifToolPath == "" {
-		return fmt.Errorf("ExifTool not found")
+		logger.Warn("ExifTool not found")
 	}
 
 	// 检测 libvips
@@ -132,7 +133,7 @@ func detectTools(baseDir *string) error {
 		}
 	}
 	if VipsPath == "" {
-		return fmt.Errorf("libvips not found")
+		logger.Warn("libvips not found")
 	}
 
 	logger.Info("工具路径检测完成",
@@ -198,13 +199,29 @@ func findTool(name string, execDir string, identification string) string {
 		filepath.Join(execDir, "tools", identification, name, "bin", exeName),
 		filepath.Join(execDir, "tools", identification, "bin", name, exeName),
 		filepath.Join(execDir, "tools", identification, "bin", exeName),
+
+		// 额外路径：针对解压后的工具结构 (如 tools/exiftool/exiftool)
+		filepath.Join(execDir, "tools", name, name),
+		filepath.Join(execDir, "tools", identification, identification),
 	}
 	jsonBytes, _ := json.Marshal(searchPaths)
 	msg := string(jsonBytes)
 	logger.Debug("查找工具路径", zap.String("tool", name), zap.String("paths", msg))
 
 	for _, path := range searchPaths {
-		if _, err := os.Stat(path); err == nil {
+		if info, err := os.Stat(path); err == nil {
+			// 确保找到的是可执行文件而不是目录
+			if info.IsDir() {
+				logger.Debug("跳过目录", zap.String("tool", name), zap.String("path", path))
+				continue
+			}
+			// 在 macOS 和 Linux 上确保工具有执行权限
+			if runtime.GOOS != "windows" {
+				if err := ensureExecutable(path); err != nil {
+					logger.Warn("设置工具执行权限失败", zap.String("tool", name), zap.String("path", path), zap.Error(err))
+					// 即使权限设置失败，仍然继续尝试使用该工具
+				}
+			}
 			logger.Info("找到工具", zap.String("tool", name), zap.String("path", path))
 			return path
 		}
@@ -212,6 +229,12 @@ func findTool(name string, execDir string, identification string) string {
 
 	// 尝试从 PATH 中查找
 	if path, err := exec.LookPath(exeName); err == nil {
+		// 在 macOS 和 Linux 上确保工具有执行权限
+		if runtime.GOOS != "windows" {
+			if err := ensureExecutable(path); err != nil {
+				logger.Warn("设置系统工具执行权限失败", zap.String("tool", name), zap.String("path", path), zap.Error(err))
+			}
+		}
 		logger.Info("从系统PATH找到工具", zap.String("tool", name), zap.String("path", path))
 		return path
 	}
@@ -414,6 +437,34 @@ func getVipsVersion() (string, error) {
 	return output, nil
 }
 
+// ensureExecutable 确保文件具有执行权限（仅适用于 Unix 系统）
+func ensureExecutable(path string) error {
+	if runtime.GOOS == "windows" {
+		return nil // Windows 不需要设置执行权限
+	}
+
+	// 获取当前文件权限
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("无法获取文件信息: %w", err)
+	}
+
+	// 检查是否已有执行权限
+	mode := info.Mode()
+	if mode&0111 != 0 {
+		return nil // 已有执行权限
+	}
+
+	// 添加执行权限 (相当于 chmod +x)
+	newMode := mode | 0111
+	if err := os.Chmod(path, newMode); err != nil {
+		return fmt.Errorf("设置执行权限失败: %w", err)
+	}
+
+	logger.Debug("已设置工具执行权限", zap.String("path", path), zap.String("mode", newMode.String()))
+	return nil
+}
+
 // CommandResult 命令执行结果
 type CommandResult struct {
 	Stdout   []byte
@@ -424,6 +475,10 @@ type CommandResult struct {
 
 // ExecuteCommand 执行命令的通用函数
 func ExecuteCommand(ctx context.Context, program string, args ...string) (*CommandResult, error) {
+	// 记录命令执行信息
+	cmdStr := fmt.Sprintf("%s %s", program, strings.Join(args, " "))
+	logger.Debug("执行命令", zap.String("command", cmdStr))
+
 	// 创建命令
 	cmd := exec.CommandContext(ctx, program, args...)
 
@@ -452,6 +507,26 @@ func ExecuteCommand(ctx context.Context, program string, args ...string) (*Comma
 		result.ExitCode = 0
 	} else {
 		result.ExitCode = -1
+	}
+
+	// 详细的错误日志记录
+	if err != nil {
+		stdoutStr := string(result.Stdout)
+		stderrStr := string(result.Stderr)
+		logger.Error("命令执行失败",
+			zap.String("command", cmdStr),
+			zap.String("program", program),
+			zap.Strings("args", args),
+			zap.Int("exitCode", result.ExitCode),
+			zap.Duration("duration", duration),
+			zap.String("stdout", stdoutStr),
+			zap.String("stderr", stderrStr),
+			zap.Error(err))
+	} else {
+		logger.Debug("命令执行成功",
+			zap.String("command", cmdStr),
+			zap.Int("exitCode", result.ExitCode),
+			zap.Duration("duration", duration))
 	}
 
 	return result, err

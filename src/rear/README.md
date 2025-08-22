@@ -37,6 +37,11 @@
 
 ## 快速开始
 
+> 目前项目处于开发阶段，依赖并不稳定，所以对于 imagemagick 与 libips 在 mac 端均需要使用
+> homebrew 进行手动安装，其中 exiftool 的静态依赖以提供。
+> 
+> 未来版本会根据对应的依赖来完成静态依赖以及动态依赖的配置和安装。
+
 ### 1. 克隆项目
 
 ```bash
@@ -53,6 +58,66 @@ go mod download
 ### 3. 准备工具链
 
 项目使用自动工具链管理系统。在开发环境下，程序会自动从 `tools/` 目录解压所需的工具：
+
+开发环境依赖安装（macOS）
+
+本项目需要依赖 Homebrew、ImageMagick 和 libvips。以下步骤介绍如何在 macOS 上安装这些工具。
+
+1. 安装 Homebrew
+
+Homebrew 是 macOS 的包管理工具，可以方便地安装和管理各种依赖。
+在终端中执行以下命令安装 Homebrew：
+
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+
+安装完成后，执行以下命令确认 Homebrew 是否安装成功：
+
+brew --version
+
+
+输出类似以下结果，表示安装成功：
+
+Homebrew 4.x.x
+
+2. 安装 ImageMagick
+
+安装 Homebrew 之后，可以使用它安装 ImageMagick：
+
+brew install imagemagick
+
+
+验证安装是否成功：
+
+magick -version
+
+
+如果看到类似以下输出，表示安装成功：
+
+Version: ImageMagick 7.x.x
+
+3. 安装 libvips
+
+同样使用 Homebrew 安装 libvips：
+
+brew install vips
+
+
+验证安装是否成功：
+
+vips --version
+
+
+输出类似以下结果，表示安装成功：
+
+vips-8.x.x
+
+4. 注意事项
+
+如果在安装过程中遇到网络问题（例如下载依赖失败），可以配置代理
+
+避免同时使用多个 homebrew 会出现锁竞争
+
 
 #### 目录结构说明
 ```

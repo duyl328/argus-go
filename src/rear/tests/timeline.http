@@ -1,6 +1,6 @@
 ### 时间线和照片列表接口测试
 
-@baseUrl = http://localhost:9483
+@baseUrl = http://localhost:9484
 @api = {{baseUrl}}/api/v1
 
 ### 1. 获取照片时间线统计（全部数据）

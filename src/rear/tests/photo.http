@@ -1,6 +1,6 @@
 ### Argus 照片管理系统 - 照片接口测试
 ### 服务器地址
-@baseUrl = http://localhost:8080
+@baseUrl = http://localhost:9484¡
 @apiBase = {{baseUrl}}/api/v1
 
 ### 注意：需要先运行图像库索引获得实际的hash值

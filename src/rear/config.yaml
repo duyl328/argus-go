@@ -2,7 +2,7 @@
 # 只包含需要自定义的配置项，其他将使用默认值
 
 app:
-  port: "9483"
+  port: "9484"
   mode: "release"
   # 开发阶段标识 - 设置为 false 或删除此行启用生产模式
   development: true
