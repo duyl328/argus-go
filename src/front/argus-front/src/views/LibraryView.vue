@@ -115,15 +115,13 @@ const removePath = async (item: LibraryPath) => {
 // 开始任务
 const startTask = async () => {
   const enabledPaths = libraryPaths.value.filter((item) => item.enabled)
-  message.error('创建任务失败')
-  return
   if (enabledPaths.length === 0) {
     message.warning('请至少选择一个启用的路径')
     return
   }
 
   try {
-    const response = await httpClient.post('/api/task/create', {
+    const response = await httpClient.post('v1/library/indexed', {
       paths: enabledPaths.map((item) => item.path),
     })
 
