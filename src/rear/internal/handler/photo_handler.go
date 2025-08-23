@@ -10,6 +10,7 @@ import (
 	"rear/internal/model"
 	"rear/internal/repositories"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -85,6 +86,47 @@ type PhotoExifInfo struct {
 	OtherFields      map[string]interface{} `json:"otherFields,omitempty"`
 }
 
+// ParseSize 解析 size 参数
+// 支持: "400", "400x400", "400X400", "400*400"
+// 返回最大值 (如果是 x 格式，取两个数字的最大)
+func ParseSize(sizeParam string) (int, error) {
+	if sizeParam == "" {
+		return 0, nil
+	}
+
+	// 全部转小写，并替换 * 为 x
+	sizeParam = strings.ToLower(sizeParam)
+	sizeParam = strings.ReplaceAll(sizeParam, "*", "x")
+
+	// 如果是纯数字
+	if !strings.Contains(sizeParam, "x") {
+		val, err := strconv.Atoi(sizeParam)
+		if err != nil {
+			return 0, err
+		}
+		return val, nil
+	}
+
+	// 分割 x
+	parts := strings.Split(sizeParam, "x")
+	if len(parts) != 2 {
+		return 0, strconv.ErrSyntax
+	}
+
+	val1, err1 := strconv.Atoi(parts[0])
+	val2, err2 := strconv.Atoi(parts[1])
+
+	if err1 != nil || err2 != nil {
+		return 0, strconv.ErrSyntax
+	}
+
+	// 返回最大值
+	if val1 > val2 {
+		return val1, nil
+	}
+	return val2, nil
+}
+
 // GetPhoto 获取图像文件
 // GET api/v1/photo/{hash}?format=thumbnail&size=400
 func (h *PhotoHandler) GetPhoto(c *gin.Context) {
@@ -100,6 +142,14 @@ func (h *PhotoHandler) GetPhoto(c *gin.Context) {
 	// 获取查询参数
 	format := c.DefaultQuery("format", "original") // original, thumbnail
 	sizeParam := c.Query("size")
+	size, err := ParseSize(sizeParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, model.Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid size parameter",
+		})
+		return
+	}
 
 	// 查询照片信息
 	photo, err := h.container.PhotoRepo.GetByHash(hash)
@@ -142,7 +192,7 @@ func (h *PhotoHandler) GetPhoto(c *gin.Context) {
 	switch format {
 	case "thumbnail":
 		// 解析尺寸参数
-		size, err := h.parseSize(sizeParam)
+		size, err := h.parseSize(string(size))
 		if err != nil {
 			c.JSON(http.StatusBadRequest, model.Response{
 				Code:    http.StatusBadRequest,
@@ -348,13 +398,19 @@ type PhotoColumnResponse struct {
 	IsImage []bool    `json:"isImage"`
 	TakenAt []string  `json:"takenAt"`
 	Ratio   []float32 `json:"ratio"`
+	// 分页和排序信息
+	Total      int64  `json:"total"`      // 本次查询范围的总数
+	NextOffset int    `json:"nextOffset"` // 下次查询的偏移量
+	HasMore    bool   `json:"hasMore"`    // 是否还有更多数据
+	Order      string `json:"order"`      // 排序方式: "asc" | "desc"
 }
 
 // GetPhotos 获取照片列表（列式存储格式）
-// GET /api/v1/photos?limit=100&offset=0&start_date=2023-01-01&end_date=2023-12-31
+// GET /api/v1/photos?limit=100&offset=0&start_date=2023-01-01&end_date=2023-12-31&order=desc
 func (h *PhotoHandler) GetPhotos(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "50")
 	offsetStr := c.DefaultQuery("offset", "0")
+	orderStr := c.DefaultQuery("order", "desc") // 默认降序 (takenAt desc)
 	startDateStr := c.Query("start_date")
 	endDateStr := c.Query("end_date")
 
@@ -371,7 +427,13 @@ func (h *PhotoHandler) GetPhotos(c *gin.Context) {
 		offset = 0
 	}
 
+	// 验证排序参数
+	if orderStr != "asc" && orderStr != "desc" {
+		orderStr = "desc"
+	}
+
 	var photos []repositories.PhotoListItem
+	var total int64
 
 	// 如果提供了时间范围参数
 	if startDateStr != "" && endDateStr != "" {
@@ -386,20 +448,53 @@ func (h *PhotoHandler) GetPhotos(c *gin.Context) {
 			return
 		}
 
-		photos, err = h.container.PhotoRepo.GetPhotoListItemsByDateRange(startDate, endDate, limit, offset)
+		photos, err = h.container.PhotoRepo.GetPhotoListItemsByDateRangeWithOrder(startDate, endDate, limit, offset, orderStr)
+		if err != nil {
+			logger.Error("获取照片列表失败", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, model.Response{
+				Code:    http.StatusInternalServerError,
+				Message: "Failed to get photos list",
+			})
+			return
+		}
+
+		// 获取总数
+		total, err = h.container.PhotoRepo.GetPhotoListItemsCountByDateRange(startDate, endDate)
+		if err != nil {
+			logger.Error("获取照片总数失败", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, model.Response{
+				Code:    http.StatusInternalServerError,
+				Message: "Failed to get photos count",
+			})
+			return
+		}
 	} else {
 		// 获取全部照片列表
-		photos, err = h.container.PhotoRepo.GetPhotoListItems(limit, offset)
+		photos, err = h.container.PhotoRepo.GetPhotoListItemsWithOrder(limit, offset, orderStr)
+		if err != nil {
+			logger.Error("获取照片列表失败", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, model.Response{
+				Code:    http.StatusInternalServerError,
+				Message: "Failed to get photos list",
+			})
+			return
+		}
+
+		// 获取总数
+		total, err = h.container.PhotoRepo.GetPhotoListItemsCount()
+		if err != nil {
+			logger.Error("获取照片总数失败", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, model.Response{
+				Code:    http.StatusInternalServerError,
+				Message: "Failed to get photos count",
+			})
+			return
+		}
 	}
 
-	if err != nil {
-		logger.Error("获取照片列表失败", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, model.Response{
-			Code:    http.StatusInternalServerError,
-			Message: "Failed to get photos list",
-		})
-		return
-	}
+	// 计算分页信息
+	nextOffset := offset + limit
+	hasMore := int64(nextOffset) < total
 
 	// 转换为列式存储格式
 	columnData := PhotoColumnResponse{
@@ -407,6 +502,11 @@ func (h *PhotoHandler) GetPhotos(c *gin.Context) {
 		IsImage: make([]bool, len(photos)),
 		TakenAt: make([]string, len(photos)),
 		Ratio:   make([]float32, len(photos)),
+		// 分页和排序信息
+		Total:      total,
+		NextOffset: nextOffset,
+		HasMore:    hasMore,
+		Order:      orderStr,
 	}
 
 	for i, photo := range photos {

@@ -438,6 +438,28 @@ func (r *PhotoRepository) GetPhotoListItems(limit int, offset int) ([]PhotoListI
 	return items, err
 }
 
+// GetPhotoListItemsWithOrder 获取照片列表项（支持排序）
+func (r *PhotoRepository) GetPhotoListItemsWithOrder(limit int, offset int, order string) ([]PhotoListItem, error) {
+	var items []PhotoListItem
+
+	// 构建排序字符串
+	var orderClause string
+	if order == "asc" {
+		orderClause = "taken_at ASC, created_at ASC"
+	} else {
+		orderClause = "taken_at DESC, created_at DESC"
+	}
+
+	err := r.db.Model(&tables.Photo{}).
+		Select("hash, width, height, aspect_ratio, format, taken_at, file_size").
+		Order(orderClause).
+		Limit(limit).
+		Offset(offset).
+		Scan(&items).Error
+
+	return items, err
+}
+
 // GetPhotoListItemsByDateRange 根据拍摄时间范围获取照片列表项
 func (r *PhotoRepository) GetPhotoListItemsByDateRange(startDate, endDate time.Time, limit int, offset int) ([]PhotoListItem, error) {
 	var items []PhotoListItem
@@ -451,4 +473,43 @@ func (r *PhotoRepository) GetPhotoListItemsByDateRange(startDate, endDate time.T
 		Scan(&items).Error
 
 	return items, err
+}
+
+// GetPhotoListItemsByDateRangeWithOrder 根据拍摄时间范围获取照片列表项（支持排序）
+func (r *PhotoRepository) GetPhotoListItemsByDateRangeWithOrder(startDate, endDate time.Time, limit int, offset int, order string) ([]PhotoListItem, error) {
+	var items []PhotoListItem
+
+	// 构建排序字符串
+	var orderClause string
+	if order == "asc" {
+		orderClause = "taken_at ASC"
+	} else {
+		orderClause = "taken_at DESC"
+	}
+
+	err := r.db.Model(&tables.Photo{}).
+		Select("hash, width, height, aspect_ratio, format, taken_at, file_size").
+		Where("taken_at IS NOT NULL AND DATE(taken_at) BETWEEN DATE(?) AND DATE(?)", startDate, endDate).
+		Order(orderClause).
+		Limit(limit).
+		Offset(offset).
+		Scan(&items).Error
+
+	return items, err
+}
+
+// GetPhotoListItemsCount 获取照片列表项总数
+func (r *PhotoRepository) GetPhotoListItemsCount() (int64, error) {
+	var count int64
+	err := r.db.Model(&tables.Photo{}).Count(&count).Error
+	return count, err
+}
+
+// GetPhotoListItemsCountByDateRange 根据拍摄时间范围获取照片列表项总数
+func (r *PhotoRepository) GetPhotoListItemsCountByDateRange(startDate, endDate time.Time) (int64, error) {
+	var count int64
+	err := r.db.Model(&tables.Photo{}).
+		Where("taken_at IS NOT NULL AND DATE(taken_at) BETWEEN DATE(?) AND DATE(?)", startDate, endDate).
+		Count(&count).Error
+	return count, err
 }
