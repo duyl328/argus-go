@@ -550,10 +550,6 @@ onUnmounted(() => {
   display: none; /* Webkit browsers */
 }
 
-.photo-period {
-  margin-bottom: 48px;
-}
-
 .period-header {
   display: flex;
   align-items: baseline;

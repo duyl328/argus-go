@@ -10,7 +10,7 @@ const router = createRouter({
     {
       path: '/photos',
       name: 'photos',
-      component: () => import('@/views/PhotosView.vue'),
+      component: () => import('@/views/PhotosView2.vue'),
       meta: { title: '照片' }
     },
     {
