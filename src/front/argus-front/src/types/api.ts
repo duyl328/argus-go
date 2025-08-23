@@ -59,6 +59,10 @@ export interface Photo {
   // 为justified-layout计算用的尺寸信息
   width: number
   height: number
+  // 预渲染优化字段
+  loaded?: boolean           // 是否已加载真实图片
+  inViewport?: boolean      // 是否在视口中
+  placeholder?: string      // 占位符颜色
 }
 
 // 时间线组织数据结构

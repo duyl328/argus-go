@@ -66,16 +66,26 @@
               }"
               @click="handlePhotoClick(photo)"
             >
+              <!-- 延迟加载的图片 -->
               <img
+                v-if="photo.loaded"
                 :src="photo.thumbnailUrl"
                 :alt="`照片 ${photo.hash.slice(0, 8)}`"
                 class="photo-image"
-                :style="{
-                  backgroundColor: photo.color
-                }"
                 @error="handleImageError"
-                loading="lazy"
+                @load="handleImageLoad(photo)"
               />
+              <!-- 占位符背景 -->
+              <div
+                v-else
+                class="photo-placeholder"
+                :style="{
+                  backgroundColor: photo.color,
+                  width: '100%',
+                  height: '100%'
+                }"
+                :data-hash="photo.hash"
+              ></div>
               <!-- 开发时显示比例信息 -->
               <div v-if="false" class="photo-debug-info">
                 <span class="photo-ratio">{{ photo.ratio.toFixed(2) }}</span>
@@ -138,9 +148,12 @@ function convertApiPhotosToPhotos(apiPhotos: ApiPhoto[]): Photo[] {
   return apiPhotos.map(apiPhoto => ({
     ...apiPhoto,
     id: apiPhoto.hash, // 使用hash作为id
-    color: generateRandomColor(), // 占位颜色
+    color: apiPhoto.placeholder || generateRandomColor(), // 使用预设占位颜色
     thumbnailUrl: getThumbnailUrl(apiPhoto.hash, '400'),
-    box: { top: 0, left: 0, width: 0, height: 0 } // 稍后计算
+    box: { top: 0, left: 0, width: 0, height: 0 }, // 稍后计算
+    // 预渲染优化字段
+    loaded: apiPhoto.loaded || false,
+    inViewport: apiPhoto.inViewport || false
   }))
 }
 
@@ -275,27 +288,100 @@ function recalculatePhotosLayout() {
   })
 }
 
+// 视口观察器
+let viewportObserver: IntersectionObserver | null = null
+
 // 处理照片点击事件
 function handlePhotoClick(photo: Photo) {
   // TODO: 实现照片详情查看或大图预览功能
   console.log('Photo clicked:', photo)
 }
 
+// 处理图片加载完成
+function handleImageLoad(photo: Photo) {
+  console.log(`图片加载完成: ${photo.hash.slice(0, 8)}`)
+}
+
 // 处理图片加载失败
 function handleImageError(event: Event) {
   const img = event.target as HTMLImageElement
-  // 显示占位颜色背景
+  const hash = img.alt?.match(/照片 (\w+)/)?.[1] || 'unknown'
+  console.warn(`图片加载失败: ${hash}`)
+  
+  // 恢复占位符显示
   img.style.display = 'none'
   const parent = img.parentElement
   if (parent) {
-    parent.style.backgroundColor = '#f0f0f0'
-    parent.innerHTML = `
-      <div class="photo-error">
-        <span>📷</span>
-        <span>加载失败</span>
-      </div>
-    `
+    // 找到对应的照片对象并重置loaded状态
+    timelineItems.value = timelineItems.value.map(item => {
+      if (item.type === 'photos' && item.photos) {
+        return {
+          ...item,
+          photos: item.photos.map(p => 
+            p.hash.startsWith(hash) ? { ...p, loaded: false } : p
+          )
+        }
+      }
+      return item
+    })
   }
+}
+
+// 初始化视口观察器
+function initViewportObserver() {
+  if (viewportObserver) {
+    viewportObserver.disconnect()
+  }
+
+  viewportObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        const hash = (entry.target as HTMLElement).dataset.hash
+        if (hash && entry.isIntersecting) {
+          // 照片进入视口，开始加载
+          loadPhotoImage(hash)
+        }
+      })
+    },
+    {
+      // 提前200px开始加载
+      rootMargin: '200px',
+      threshold: 0
+    }
+  )
+}
+
+// 加载具体照片图片
+function loadPhotoImage(hash: string) {
+  timelineItems.value = timelineItems.value.map(item => {
+    if (item.type === 'photos' && item.photos) {
+      return {
+        ...item,
+        photos: item.photos.map(photo => {
+          if (photo.hash === hash && !photo.loaded) {
+            console.log(`开始加载图片: ${hash.slice(0, 8)}`)
+            return { ...photo, loaded: true, inViewport: true }
+          }
+          return photo
+        })
+      }
+    }
+    return item
+  })
+}
+
+// 观察所有占位符元素
+function observePhotos() {
+  if (!viewportObserver) return
+
+  // 观察当前所有的占位符元素
+  nextTick(() => {
+    const placeholders = document.querySelectorAll('.photo-placeholder[data-hash]')
+    placeholders.forEach(placeholder => {
+      viewportObserver?.observe(placeholder)
+    })
+    console.log(`开始观察 ${placeholders.length} 个照片占位符`)
+  })
 }
 
 // 初始化数据
@@ -308,8 +394,15 @@ onMounted(async () => {
     containerWidth.value = container.clientWidth
   }
 
+  // 初始化视口观察器
+  initViewportObserver()
+  
   // 加载时间线数据
   await loadTimelineData()
+
+  // 数据加载完成后开始观察照片
+  await nextTick()
+  observePhotos()
 
   // 监听窗口大小变化
   const handleResize = () => {
@@ -318,15 +411,21 @@ onMounted(async () => {
       if (Math.abs(newWidth - containerWidth.value) > 50) { // 只有明显变化时才重新计算
         containerWidth.value = newWidth
         recalculatePhotosLayout()
+        // 重新计算后重新观察
+        nextTick(() => observePhotos())
       }
     }
   }
 
   window.addEventListener('resize', handleResize)
 
-  // 清理事件监听器
+  // 清理事件监听器和观察器
   return () => {
     window.removeEventListener('resize', handleResize)
+    if (viewportObserver) {
+      viewportObserver.disconnect()
+      viewportObserver = null
+    }
   }
 })
 </script>
@@ -490,8 +589,39 @@ onMounted(async () => {
   transition: opacity 0.3s ease;
 }
 
-.photo-image:not([src]) {
+.photo-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: background-color 0.2s ease;
+}
+
+.photo-placeholder::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  animation: placeholder-spin 1s linear infinite;
   opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.photo-placeholder:hover::after {
+  opacity: 1;
+}
+
+@keyframes placeholder-spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
 /* 图片加载失败显示 */

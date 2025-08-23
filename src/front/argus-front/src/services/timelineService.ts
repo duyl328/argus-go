@@ -27,43 +27,83 @@ export async function getPhotos(params?: PhotosParams): Promise<ApiResponse<Phot
 }
 
 /**
- * 根据时间线数据获取具体某天的照片
+ * 根据时间线数据获取具体某天的照片（分页获取所有照片）
  */
-export async function getPhotosByDate(date: string, limit = 50, offset = 0): Promise<Photo[]> {
-  const response:ApiResponse<PhotosData> = await getPhotos({
-    start_date: date,
-    end_date: date,
-    limit,
-    offset
-  })
-
-  if (response.code !== 200 || !response.data) {
-    return []
-  }
-  const { hash, isImage, takenAt, ratio } = response.data
-
-  // 转换列式存储数据为行式存储
+export async function getPhotosByDate(date: string, totalCount: number): Promise<Photo[]> {
   const photos: Photo[] = []
-  const count = Math.min(hash.length, isImage.length, takenAt.length, ratio.length)
+  const pageSize = 1000 // API最大限制
+  let offset = 0
+  
+  console.log(`开始获取 ${date} 的照片，总计 ${totalCount} 张`)
+  
+  while (photos.length < totalCount) {
+    try {
+      const response: ApiResponse<PhotosData> = await getPhotos({
+        start_date: date,
+        end_date: date,
+        limit: Math.min(pageSize, totalCount - photos.length),
+        offset
+      })
 
-  for (let i = 0; i < count; i++) {
-    // 为justified-layout计算实际尺寸
-    const photoRatio = ratio[i] || 1
-    const baseHeight = 200
-    const width = Math.round(baseHeight * photoRatio)
-    const height = baseHeight
+      if (response.code !== 200 || !response.data) {
+        console.warn(`获取照片失败 ${date}, offset: ${offset}`)
+        break
+      }
 
-    photos.push({
-      hash: hash[i],
-      isImage: isImage[i],
-      takenAt: takenAt[i],
-      ratio: photoRatio,
-      width,
-      height
-    })
+      const { hash, isImage, takenAt, ratio } = response.data
+      const count = Math.min(hash.length, isImage.length, takenAt.length, ratio.length)
+      
+      if (count === 0) {
+        console.log(`没有更多照片了 ${date}, offset: ${offset}`)
+        break
+      }
+
+      // 转换列式存储数据为行式存储
+      for (let i = 0; i < count; i++) {
+        const photoRatio = ratio[i] || 1
+        const baseHeight = 200
+        const width = Math.round(baseHeight * photoRatio)
+        const height = baseHeight
+
+        photos.push({
+          hash: hash[i],
+          isImage: isImage[i],
+          takenAt: takenAt[i],
+          ratio: photoRatio,
+          width,
+          height,
+          loaded: false,           // 预渲染优化：初始未加载真实图片
+          inViewport: false,       // 预渲染优化：初始不在视口中
+          placeholder: generatePlaceholderColor() // 预渲染优化：占位符颜色
+        })
+      }
+
+      offset += count
+      console.log(`已获取 ${photos.length}/${totalCount} 张照片 (${date})`)
+      
+      // 如果返回的数量小于请求数量，说明已经到底了
+      if (count < Math.min(pageSize, totalCount - offset + count)) {
+        break
+      }
+    } catch (error) {
+      console.error(`获取照片失败 ${date}, offset: ${offset}:`, error)
+      break
+    }
   }
 
+  console.log(`完成获取 ${date} 的照片，实际获取 ${photos.length} 张`)
   return photos
+}
+
+/**
+ * 生成占位符颜色
+ */
+function generatePlaceholderColor(): string {
+  const colors = [
+    '#f0f2f5', '#fafafa', '#f5f5f5', '#e8e8e8', '#d9d9d9',
+    '#bfbfbf', '#8c8c8c', '#595959', '#434343', '#262626'
+  ]
+  return colors[Math.floor(Math.random() * colors.length)]
 }
 
 /**
@@ -158,12 +198,12 @@ export async function getFullTimeline(params?: TimelineParams): Promise<MonthGro
     const monthGroups = groupTimelineByMonth(timelineResponse.data)
     console.log('处理后的月份分组:', monthGroups)
 
-    // 为每个日期加载照片数据（限制加载数量，避免一次性加载太多）
+    // 为每个日期加载照片比例数据（分页获取所有照片）
     for (const monthGroup of monthGroups) {
       for (const dayGroup of monthGroup.days) {
         try {
-          // 每天最多加载30张照片用于展示
-          const photos = await getPhotosByDate(dayGroup.date, 30, 0)
+          // 使用时间线中的count信息，分页获取当天所有照片的比例数据
+          const photos = await getPhotosByDate(dayGroup.date, dayGroup.count)
           dayGroup.photos = photos
         } catch (error) {
           console.error(`Failed to load photos for ${dayGroup.date}:`, error)
