@@ -13,9 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"rear/pkg/logger"
+
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-	"rear/pkg/logger"
 )
 
 type PhotoHandler struct {
@@ -192,7 +193,7 @@ func (h *PhotoHandler) GetPhoto(c *gin.Context) {
 	switch format {
 	case "thumbnail":
 		// 解析尺寸参数
-		size, err := h.parseSize(string(size))
+		size, err := h.parseSize(strconv.Itoa(size))
 		if err != nil {
 			c.JSON(http.StatusBadRequest, model.Response{
 				Code:    http.StatusBadRequest,

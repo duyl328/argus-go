@@ -63,8 +63,8 @@ func GetVipsImageInfo(ctx context.Context, inputPath string) (*VipsImageInfo, er
 	if err := utils.EnsureInitialized(nil, nil); err != nil {
 		return nil, err
 	}
-	// 构建 vipsheader.exe 的路径
-	vipsHeaderPath := filepath.Join(filepath.Dir(utils.VipsPath), "vipsheader.exe")
+	// 构建 vipsheader 的路径（跨平台兼容）
+	vipsHeaderPath := filepath.Join(filepath.Dir(utils.VipsPath), "vipsheader")
 
 	// 执行 vipsheader -a 命令
 	result, err := utils.ExecuteCommand(ctx, vipsHeaderPath, "-a", inputPath)
