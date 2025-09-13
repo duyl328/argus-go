@@ -1,0 +1,278 @@
+### Argus 照片管理系统 - 文件系统管理测试
+### 这个文件展示了如何使用文件系统管理API
+### 服务器地址
+@baseUrl = http://localhost:8080
+@apiBase = {{baseUrl}}/api/v1
+
+### ===== 文件系统浏览功能 =====
+
+### 1. 获取根级别信息 - 查看所有硬盘/挂载点
+### Windows上会显示 C:, D:, E: 等盘符
+### Linux/Mac上会显示 /, /home, /usr 等挂载点
+GET {{apiBase}}/filesystem/browse
+Accept: application/json
+
+### 2. 浏览 Windows C盘 根目录
+### 显示 C:\ 下的所有文件夹和文件
+GET {{apiBase}}/filesystem/browse?path=C:\
+Accept: application/json
+
+### 3. 浏览 Windows 用户目录
+### 显示 C:\Users 下的内容
+GET {{apiBase}}/filesystem/browse?path=C:\Users
+Accept: application/json
+
+### 4. 浏览 Windows 程序文件目录
+### 显示 C:\Program Files 下的内容
+GET {{apiBase}}/filesystem/browse?path=C:\Program Files
+Accept: application/json
+
+### 5. 浏览当前项目目录
+### 显示当前Go项目目录的内容
+GET {{apiBase}}/filesystem/browse?path=D:\go-argus
+Accept: application/json
+
+### 6. 浏览 Linux/Mac 根目录（如果在Unix系统上运行）
+### GET {{apiBase}}/filesystem/browse?path=/
+### Accept: application/json
+
+### 7. 浏览 Linux/Mac 用户主目录（如果在Unix系统上运行）
+### GET {{apiBase}}/filesystem/browse?path=/home
+### Accept: application/json
+
+### ===== 磁盘使用情况查询 =====
+
+### 8. 查看 C盘 磁盘使用情况
+### 返回总容量、已用容量、剩余容量、使用百分比等信息
+GET {{apiBase}}/filesystem/disk-usage?path=C:\
+Accept: application/json
+
+### 9. 查看 D盘 磁盘使用情况
+GET {{apiBase}}/filesystem/disk-usage?path=D:\
+Accept: application/json
+
+### 10. 查看根分区使用情况（Linux/Mac）
+### GET {{apiBase}}/filesystem/disk-usage?path=/
+### Accept: application/json
+
+### ===== 文件系统项目信息查询 =====
+
+### 11. 获取特定目录的详细信息
+GET {{apiBase}}/filesystem/item?path=C:\Windows
+Accept: application/json
+
+### 12. 获取当前项目目录信息
+GET {{apiBase}}/filesystem/item?path=D:\go-argus\src\rear
+Accept: application/json
+
+### ===== 文件搜索功能 =====
+
+### 13. 在C盘根目录搜索所有 .txt 文件（非递归）
+GET {{apiBase}}/filesystem/search?path=C:\&pattern=*.txt&recursive=false
+Accept: application/json
+
+### 14. 在项目目录递归搜索所有 .go 文件
+GET {{apiBase}}/filesystem/search?path=D:\go-argus&pattern=*.go&recursive=true
+Accept: application/json
+
+### 15. 在用户目录搜索所有文件（递归）
+GET {{apiBase}}/filesystem/search?path=C:\Users&pattern=*&recursive=true
+Accept: application/json
+
+### 16. 搜索特定扩展名的文件
+GET {{apiBase}}/filesystem/search?path=D:\go-argus\src\rear&pattern=*.json&recursive=false
+Accept: application/json
+
+### ===== 目录创建功能 =====
+
+### 17. 创建新目录
+POST {{apiBase}}/filesystem/directory
+Content-Type: application/json
+
+{
+  "path": "D:\\go-argus\\test-directory"
+}
+
+### 18. 创建嵌套目录
+POST {{apiBase}}/filesystem/directory
+Content-Type: application/json
+
+{
+  "path": "D:\\go-argus\\test\\nested\\deep\\directory"
+}
+
+### ===== 文件/目录删除功能 =====
+
+### 19. 删除文件
+DELETE {{apiBase}}/filesystem/item?path=D:\go-argus\test-file.txt
+Accept: application/json
+
+### 20. 删除目录
+DELETE {{apiBase}}/filesystem/item?path=D:\go-argus\test-directory
+Accept: application/json
+
+### ===== 文件/目录移动功能 =====
+
+### 21. 重命名文件
+PUT {{apiBase}}/filesystem/item/move
+Content-Type: application/json
+
+{
+  "source": "D:\\go-argus\\old-file.txt",
+  "destination": "D:\\go-argus\\new-file.txt"
+}
+
+### 22. 移动文件到其他目录
+PUT {{apiBase}}/filesystem/item/move
+Content-Type: application/json
+
+{
+  "source": "D:\\go-argus\\src\\file.txt",
+  "destination": "D:\\go-argus\\backup\\file.txt"
+}
+
+### 23. 重命名目录
+PUT {{apiBase}}/filesystem/item/move
+Content-Type: application/json
+
+{
+  "source": "D:\\go-argus\\old-folder",
+  "destination": "D:\\go-argus\\new-folder"
+}
+
+### ===== 文件/目录复制功能 =====
+
+### 24. 复制文件（不覆盖）
+POST {{apiBase}}/filesystem/item/copy
+Content-Type: application/json
+
+{
+  "source": "D:\\go-argus\\src\\important-file.txt",
+  "destination": "D:\\go-argus\\backup\\important-file.txt",
+  "overwrite": false
+}
+
+### 25. 复制文件（允许覆盖）
+POST {{apiBase}}/filesystem/item/copy
+Content-Type: application/json
+
+{
+  "source": "D:\\go-argus\\config.yaml",
+  "destination": "D:\\go-argus\\backup\\config.yaml",
+  "overwrite": true
+}
+
+### 26. 复制目录
+POST {{apiBase}}/filesystem/item/copy
+Content-Type: application/json
+
+{
+  "source": "D:\\go-argus\\src\\rear\\internal",
+  "destination": "D:\\go-argus\\backup\\internal",
+  "overwrite": false
+}
+
+### ===== 错误处理示例 =====
+
+### 27. 访问不存在的路径 - 应该返回错误
+GET {{apiBase}}/filesystem/browse?path=X:\NonExistentPath
+Accept: application/json
+
+### 28. 访问没有权限的目录 - 可能返回错误
+GET {{apiBase}}/filesystem/browse?path=C:\System Volume Information
+Accept: application/json
+
+### 29. 磁盘使用情况查询 - 空path参数
+GET {{apiBase}}/filesystem/disk-usage
+Accept: application/json
+
+### 30. 创建目录 - 缺少path参数
+POST {{apiBase}}/filesystem/directory
+Content-Type: application/json
+
+{
+}
+
+### ===== 特殊字符和路径测试 =====
+
+### 31. 包含空格的路径
+GET {{apiBase}}/filesystem/browse?path=C:\Program Files
+Accept: application/json
+
+### 32. 包含中文的路径（如果存在）
+### GET {{apiBase}}/filesystem/browse?path=C:\用户
+### Accept: application/json
+
+### 33. 网络路径（Windows UNC路径，如果配置了网络驱动器）
+### GET {{apiBase}}/filesystem/browse?path=\\server\share
+### Accept: application/json
+
+### ===== 响应数据结构说明 =====
+###
+### 浏览接口 (browse) 返回结构:
+### {
+###   "code": 200,
+###   "message": "获取文件系统信息成功",
+###   "data": {
+###     "current_path": "当前路径",
+###     "parent_path": "父路径",
+###     "items": [
+###       {
+###         "id": "项目唯一标识",
+###         "name": "显示名称",
+###         "path": "完整路径",
+###         "type": "drive|directory|file",
+###         "size": "大小(字节)",
+###         "mod_time": "修改时间",
+###         "is_accessible": "是否可访问",
+###         "drive_info": {  // 仅当type为drive时存在
+###           "label": "卷标",
+###           "file_system": "文件系统类型",
+###           "total_space": "总空间",
+###           "free_space": "可用空间",
+###           "used_space": "已用空间",
+###           "usage_percent": "使用百分比",
+###           "is_removable": "是否可移动",
+###           "drive_type": "驱动器类型"
+###         },
+###         "file_info": {  // 仅当type为file时存在
+###           "extension": "文件扩展名",
+###           "mime_type": "MIME类型"
+###         },
+###         "directory_info": {  // 仅当type为directory时存在
+###           "item_count": "子项目数量"
+###         }
+###       }
+###     ],
+###     "summary": {
+###       "total_items": "总项目数",
+###       "directory_count": "目录数量",
+###       "file_count": "文件数量",
+###       "drive_count": "驱动器数量"
+###     }
+###   }
+### }
+
+### ===== 使用场景说明 =====
+###
+### 1. 文件管理器主界面:
+###    - 调用 browse 接口不传path参数，获取所有硬盘
+###    - 用户点击某个盘符后，调用 browse?path=C:\ 获取盘符内容
+###
+### 2. 磁盘空间监控:
+###    - 定期调用 disk-usage 接口监控各个盘符的使用情况
+###    - 在界面上显示磁盘使用率饼图或进度条
+###
+### 3. 文件搜索:
+###    - 用户输入搜索关键词后，调用 search 接口
+###    - 可以选择是否递归搜索子目录
+###
+### 4. 文件操作:
+###    - 新建文件夹: POST /directory
+###    - 删除文件/文件夹: DELETE /item
+###    - 重命名/移动: PUT /item/move
+###    - 复制: POST /item/copy
+###
+### 5. 面包屑导航:
+###    - 使用响应中的 current_path 和 parent_path 构建导航路径
+###    - 用户点击面包屑时调用对应路径的 browse 接口

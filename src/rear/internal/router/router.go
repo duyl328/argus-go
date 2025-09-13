@@ -21,6 +21,10 @@ func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *cont
 	exifHandler := handler.NewExifHandler(contain)
 	photoHandler := handler.NewPhotoHandler(contain, imgContain)
 
+	// 文件系统处理
+	fileSystemHandler := handler.NewFileSystemHandler()
+	fileOperationsHandler := handler.NewFileOperationsHandler()
+
 	// API版本组
 	v1 := r.Group("/api/v1")
 	{
@@ -76,6 +80,21 @@ func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *cont
 		assets := v1.Group("/assets")
 		{
 			assets.GET("/:hash", photoHandler.GetPhotoAssets) // 获取图像详细信息
+		}
+
+		// 文件系统相关路由
+		filesystem := v1.Group("/filesystem")
+		{
+			filesystem.GET("/browse", fileSystemHandler.BrowseFileSystem)       // 浏览文件系统
+			filesystem.GET("/disk-usage", fileSystemHandler.GetDiskUsage)      // 获取磁盘使用情况
+			filesystem.GET("/item", fileSystemHandler.GetFileSystemItem)       // 获取文件系统项目信息
+			filesystem.GET("/search", fileSystemHandler.SearchFiles)           // 搜索文件
+
+			// 文件操作相关路由
+			filesystem.POST("/directory", fileOperationsHandler.CreateDirectory)   // 创建目录
+			filesystem.DELETE("/item", fileOperationsHandler.DeleteItem)           // 删除文件或目录
+			filesystem.PUT("/item/move", fileOperationsHandler.MoveItem)           // 移动/重命名
+			filesystem.POST("/item/copy", fileOperationsHandler.CopyItem)          // 复制文件或目录
 		}
 	}
 	// 开发组
