@@ -15,7 +15,8 @@
       "Bash(git add:*)",
       "Bash(del \"D:\\go-argus\\src\\rear\\api_tests.http\")",
       "Bash(curl:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }
