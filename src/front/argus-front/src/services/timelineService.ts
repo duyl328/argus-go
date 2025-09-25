@@ -33,9 +33,9 @@ export async function getPhotosByDate(date: string, totalCount: number): Promise
   const photos: Photo[] = []
   const pageSize = 1000 // API最大限制
   let offset = 0
-  
+
   console.log(`开始获取 ${date} 的照片，总计 ${totalCount} 张`)
-  
+
   while (photos.length < totalCount) {
     try {
       const response: ApiResponse<PhotosData> = await getPhotos({
@@ -52,7 +52,7 @@ export async function getPhotosByDate(date: string, totalCount: number): Promise
 
       const { hash, isImage, takenAt, ratio } = response.data
       const count = Math.min(hash.length, isImage.length, takenAt.length, ratio.length)
-      
+
       if (count === 0) {
         console.log(`没有更多照片了 ${date}, offset: ${offset}`)
         break
@@ -80,7 +80,7 @@ export async function getPhotosByDate(date: string, totalCount: number): Promise
 
       offset += count
       console.log(`已获取 ${photos.length}/${totalCount} 张照片 (${date})`)
-      
+
       // 如果返回的数量小于请求数量，说明已经到底了
       if (count < Math.min(pageSize, totalCount - offset + count)) {
         break
@@ -190,7 +190,7 @@ export async function getFullTimeline(params?: TimelineParams): Promise<MonthGro
     if (timelineResponse.code !== 200) {
       throw new Error(timelineResponse.message || '获取时间线数据失败')
     }
-
+console.log(timelineResponse.data,'++++++++');
     if (!Array.isArray(timelineResponse.data)) {
       throw new Error('时间线数据格式错误')
     }

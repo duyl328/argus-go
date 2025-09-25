@@ -120,7 +120,7 @@ Accept: application/json
 ##
 
 ### 6. 获取照片列表（指定时间范围）
-GET {{api}}/photos?start_date=2023-01-01&end_date=2023-12-31&limit=50&offset=0
+GET {{api}}/photos?start_date=2023-01-01&end_date=2025-12-31&limit=50&offset=0
 Accept: application/json
 
 ##
