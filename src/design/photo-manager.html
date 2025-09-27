@@ -1,0 +1,1399 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Argus - 照片管理器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+  <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: '#0078d4',
+            accent: '#00bcf2',
+            win: {
+              bg: '#f3f3f3',
+              surface: '#ffffff',
+              border: '#e5e5e5',
+              text: '#323130',
+              textSecondary: '#605e5c',
+              hover: '#f8f8f8',
+              active: '#e3f2fd'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --tile-size: 120px;
+      --tile-gap: 8px;
+    }
+
+    /* Win11 风格 */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .win-button {
+      @apply px-3 py-1.5 text-sm rounded hover:bg-gray-100 border border-transparent hover:border-gray-200 transition-all duration-150;
+    }
+
+    .win-button:hover {
+      background: rgba(0,0,0,0.03);
+    }
+
+    .win-button.active {
+      background: #e3f2fd;
+      border-color: #90caf9;
+    }
+
+    .photo-tile {
+      width: var(--tile-size);
+      height: var(--tile-size);
+    }
+
+    .folder-tile {
+      width: var(--tile-size);
+      height: calc(var(--tile-size) * 0.85);
+    }
+
+    .grid-tiles {
+      grid-template-columns: repeat(auto-fill, minmax(var(--tile-size), 1fr));
+      gap: var(--tile-gap);
+    }
+
+    .no-select {
+      user-select: none;
+    }
+
+    .duplicate-indicator {
+      animation: pulse 2s infinite;
+    }
+
+    /* 现代化滚动条 */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #a8a8a8;
+    }
+
+    /* 双栏分割线 */
+    .pane-splitter {
+      background: #e5e5e5;
+      cursor: col-resize;
+    }
+
+    .pane-splitter:hover {
+      background: #d0d0d0;
+    }
+
+    .pane-splitter.vertical {
+      cursor: row-resize;
+    }
+
+    /* 现代化按钮组 */
+    .button-group {
+      background: #f8f8f8;
+      border: 1px solid #e5e5e5;
+      border-radius: 6px;
+      padding: 2px;
+    }
+
+    .button-group button {
+      @apply px-2 py-1 text-sm rounded transition-all duration-150;
+    }
+
+    .button-group button.active {
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body class="bg-win-bg text-win-text no-select">
+
+  <!-- Win11 风格顶部工具栏 -->
+  <header class="bg-win-surface border-b border-win-border">
+    <!-- 第一行：快捷操作栏 -->
+    <div class="px-4 py-2 flex items-center justify-between">
+      <!-- 左侧：Win11风格快捷按钮 -->
+      <div class="flex items-center gap-1">
+        <!-- 文件操作 -->
+        <button id="btnCut" class="win-button flex items-center gap-1" title="剪切">
+          <ion-icon name="cut-outline"></ion-icon>
+          <span>剪切</span>
+        </button>
+        <button id="btnCopy" class="win-button flex items-center gap-1" title="复制">
+          <ion-icon name="copy-outline"></ion-icon>
+          <span>复制</span>
+        </button>
+        <button id="btnPaste" class="win-button flex items-center gap-1" title="粘贴">
+          <ion-icon name="clipboard-outline"></ion-icon>
+          <span>粘贴</span>
+        </button>
+        <button id="btnRename" class="win-button flex items-center gap-1" title="重命名">
+          <ion-icon name="create-outline"></ion-icon>
+          <span>重命名</span>
+        </button>
+        <button id="btnDelete" class="win-button flex items-center gap-1 text-red-600" title="删除">
+          <ion-icon name="trash-outline"></ion-icon>
+          <span>删除</span>
+        </button>
+
+        <div class="w-px h-6 bg-win-border mx-2"></div>
+
+        <!-- 照片专用操作 -->
+        <button id="btnTags" class="win-button flex items-center gap-1" title="编辑标签">
+          <ion-icon name="pricetag-outline"></ion-icon>
+          <span>编辑标签</span>
+        </button>
+        <button id="btnAlbum" class="win-button flex items-center gap-1" title="加入相册">
+          <ion-icon name="albums-outline"></ion-icon>
+          <span>加入相册</span>
+        </button>
+        <button id="btnBatchEdit" class="win-button flex items-center gap-1" title="批量编辑EXIF">
+          <ion-icon name="settings-outline"></ion-icon>
+          <span>批量编辑</span>
+        </button>
+      </div>
+
+      <!-- 右侧：视图和设置 -->
+      <div class="flex items-center gap-3">
+        <!-- 双栏布局控制 -->
+        <div class="button-group flex">
+          <button id="layoutSingle" class="active">单栏</button>
+          <button id="layoutDualH">左右</button>
+          <button id="layoutDualV">上下</button>
+        </div>
+
+        <!-- 视图切换 -->
+        <div class="button-group flex">
+          <button id="viewTiles" class="active" title="平铺视图">
+            <ion-icon name="grid-outline"></ion-icon>
+          </button>
+          <button id="viewList" title="列表视图">
+            <ion-icon name="list-outline"></ion-icon>
+          </button>
+        </div>
+
+        <!-- 缩略图大小 -->
+        <div class="button-group flex">
+          <button class="size-btn" data-size="80" title="小">
+            <ion-icon name="square-outline" style="font-size: 12px;"></ion-icon>
+          </button>
+          <button class="size-btn active" data-size="120" title="中">
+            <ion-icon name="square-outline" style="font-size: 16px;"></ion-icon>
+          </button>
+          <button class="size-btn" data-size="160" title="大">
+            <ion-icon name="square-outline" style="font-size: 20px;"></ion-icon>
+          </button>
+          <button class="size-btn" data-size="200" title="超大">
+            <ion-icon name="square-outline" style="font-size: 24px;"></ion-icon>
+          </button>
+        </div>
+
+        <!-- 信息预览开关 -->
+        <label class="button-group flex items-center gap-2 px-2">
+          <input id="showPreviewPane" type="checkbox" class="accent-brand">
+          <span class="text-sm">预览窗格</span>
+        </label>
+
+        <!-- 更多操作 -->
+        <div class="flex items-center gap-1">
+          <button id="btnDuplicates" class="win-button flex items-center gap-1 text-orange-600" title="查看重复项">
+            <ion-icon name="copy-outline"></ion-icon>
+            <span>重复项</span>
+            <span id="duplicateCount" class="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">3</span>
+          </button>
+          <button id="btnSearch" class="win-button" title="搜索">
+            <ion-icon name="search-outline"></ion-icon>
+          </button>
+          <button id="btnSettings" class="win-button" title="设置">
+            <ion-icon name="settings-outline"></ion-icon>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第二行：面包屑导航 -->
+    <div class="px-4 py-2 bg-win-hover border-t border-win-border">
+      <div class="flex items-center justify-between">
+        <!-- 导航按钮 + 面包屑 -->
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1">
+            <button id="btnBack" class="p-1.5 rounded hover:bg-gray-200 disabled:opacity-50" title="后退">
+              <ion-icon name="chevron-back-outline"></ion-icon>
+            </button>
+            <button id="btnForward" class="p-1.5 rounded hover:bg-gray-200 disabled:opacity-50" title="前进">
+              <ion-icon name="chevron-forward-outline"></ion-icon>
+            </button>
+            <button id="btnUp" class="p-1.5 rounded hover:bg-gray-200 disabled:opacity-50" title="上一级">
+              <ion-icon name="arrow-up-outline"></ion-icon>
+            </button>
+          </div>
+          <div class="w-px h-5 bg-win-border"></div>
+          <div id="breadcrumb" class="flex items-center gap-1 text-sm">
+            <!-- 动态生成面包屑 -->
+          </div>
+        </div>
+
+        <!-- 搜索框 -->
+        <div id="searchBox" class="relative hidden">
+          <ion-icon name="search-outline" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></ion-icon>
+          <input id="searchInput" placeholder="搜索照片、视频..."
+                 class="pl-10 pr-4 py-2 w-80 border border-win-border rounded focus:border-brand focus:outline-none text-sm"/>
+        </div>
+
+        <!-- 状态信息 -->
+        <div class="flex items-center gap-4 text-sm text-win-textSecondary">
+          <span id="selectionInfo">未选择</span>
+          <span id="totalItems">0 项</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主内容区 -->
+  <main id="mainContent" class="flex-1 overflow-hidden">
+    <div id="workspaceContainer" class="h-full grid">
+      <!-- 主工作区 -->
+      <div id="primaryPane" class="flex flex-col bg-win-surface border border-win-border">
+        <!-- 内容区 -->
+        <div class="flex-1 overflow-auto p-3">
+          <!-- 平铺视图 -->
+          <div id="tilesView" class="grid grid-tiles gap-2">
+            <!-- 动态生成瓦片内容 -->
+          </div>
+
+          <!-- 列表视图 -->
+          <div id="listView" class="hidden">
+            <!-- 列表表头 -->
+            <div class="grid grid-cols-12 gap-4 px-3 py-2 text-xs font-medium text-win-textSecondary bg-win-hover border-b border-win-border sticky top-0">
+              <div class="col-span-5">名称</div>
+              <div class="col-span-2">修改日期</div>
+              <div class="col-span-2">类型</div>
+              <div class="col-span-2">大小</div>
+              <div class="col-span-1">标签</div>
+            </div>
+            <!-- 列表内容 -->
+            <div id="listContent">
+              <!-- 动态生成列表项 -->
+            </div>
+          </div>
+
+          <!-- 空状态 -->
+          <div id="emptyState" class="hidden flex flex-col items-center justify-center h-full text-center">
+            <div class="text-gray-300 mb-4">
+              <ion-icon name="image-outline" style="font-size: 4rem;"></ion-icon>
+            </div>
+            <h3 class="text-lg font-medium text-win-text mb-2">这里还没有照片</h3>
+            <p class="text-win-textSecondary mb-6">导入一些照片开始使用 Argus</p>
+            <button class="px-4 py-2 bg-brand text-white rounded hover:bg-blue-600 flex items-center gap-2">
+              <ion-icon name="cloud-upload-outline"></ion-icon>
+              导入照片
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 分割线（仅双栏时显示） -->
+      <div id="splitter" class="pane-splitter w-2 hidden"></div>
+
+      <!-- 第二栏（仅双栏时显示） -->
+      <div id="secondaryPane" class="hidden flex flex-col bg-win-surface border border-win-border">
+        <div class="flex-1 overflow-auto p-3">
+          <div id="secondaryContent" class="grid grid-tiles gap-2">
+            <!-- 第二栏内容 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 预览窗格（可选） -->
+      <div id="previewPane" class="hidden flex flex-col bg-win-surface border-l border-win-border w-80">
+        <div class="p-3 border-b border-win-border">
+          <h3 class="font-medium text-sm">预览</h3>
+        </div>
+        <div class="flex-1 overflow-auto p-3">
+          <div id="previewContent">
+            <div class="text-center text-win-textSecondary py-8">
+              <ion-icon name="image-outline" style="font-size: 3rem;" class="block mb-2"></ion-icon>
+              <p>选择项目查看预览</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 预览模态框 -->
+  <div id="previewModal" class="fixed inset-0 bg-black/80 flex items-center justify-center hidden z-50">
+    <div class="relative max-w-[90vw] max-h-[90vh]">
+      <img id="previewImage" class="max-w-[90vw] max-h-[90vh] object-contain hidden">
+      <video id="previewVideo" class="max-w-[90vw] max-h-[90vh] hidden" controls></video>
+
+      <!-- 预览控制栏 -->
+      <div class="absolute top-4 right-4 flex items-center gap-2">
+        <button id="btnFullscreen" class="p-2 rounded-lg bg-black/50 text-white hover:bg-black/70">
+          <ion-icon name="expand-outline"></ion-icon>
+        </button>
+        <button id="btnPreviewClose" class="p-2 rounded-lg bg-black/50 text-white hover:bg-black/70">
+          <ion-icon name="close-outline"></ion-icon>
+        </button>
+      </div>
+
+      <!-- 照片信息面板 -->
+      <div id="photoInfo" class="absolute bottom-4 left-4 bg-black/70 text-white rounded-lg p-4 max-w-sm">
+        <h4 id="photoName" class="font-medium mb-2">IMG_001.jpg</h4>
+        <div class="text-sm space-y-1">
+          <div id="photoSize">2048 × 1536</div>
+          <div id="photoDate">2024-01-01 12:00:00</div>
+          <div id="photoFileSize">2.5 MB</div>
+          <div id="cameraInfo" class="hidden">Canon EOS R5 · f/2.8 · 1/125s · ISO 400</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // 应用状态
+  let state = {
+    currentFolder: null,
+    history: [],
+    historyIndex: 0,
+    selectedItems: new Set(),
+    layout: 'single', // single, dual-h, dual-v
+    viewMode: 'tiles', // tiles, list
+    showPreview: false,
+    tileSize: 120,
+    clipboard: null, // { action: 'cut'|'copy', items: [] }
+    panes: {
+      primary: null,
+      secondary: null
+    }
+  };
+
+  // 模拟数据生成
+  const img = (name, w=1600, h=1200) => `https://picsum.photos/seed/${encodeURIComponent(name)}/${w}/${h}`;
+  let itemId = 1;
+  const uid = () => (itemId++).toString();
+
+  const createFolder = (name, children = []) => ({
+    id: uid(),
+    type: 'folder',
+    name,
+    children,
+    path: `/photos/${name}`,
+    itemCount: children.length,
+    date: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1)
+  });
+
+  const createPhoto = (name, isDuplicate = false) => ({
+    id: uid(),
+    type: 'image',
+    name,
+    src: img(name),
+    thumbnail: img(name, 400, 400),
+    size: Math.floor(Math.random() * 5000000) + 500000,
+    width: 1600,
+    height: 1200,
+    date: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1),
+    isDuplicate,
+    tags: isDuplicate ? ['重复'] : [],
+    exif: {
+      camera: 'Canon EOS R5',
+      lens: 'RF 24-70mm f/2.8L',
+      fNumber: 'f/2.8',
+      exposureTime: '1/125s',
+      iso: 'ISO 400'
+    }
+  });
+
+  const createVideo = (name) => ({
+    id: uid(),
+    type: 'video',
+    name,
+    thumbnail: img(name, 400, 400),
+    size: Math.floor(Math.random() * 50000000) + 5000000,
+    duration: Math.floor(Math.random() * 300) + 30,
+    date: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1),
+    tags: []
+  });
+
+  const createOtherFile = (name, ext, color) => ({
+    id: uid(),
+    type: 'other',
+    name,
+    ext,
+    color,
+    size: Math.floor(Math.random() * 1000000) + 10000,
+    date: new Date(),
+    tags: []
+  });
+
+  // 初始化数据
+  const rootData = createFolder('我的照片', [
+    createFolder('2024年旅行', [
+      createFolder('东京之旅', [
+        createPhoto('东京塔夜景'),
+        createPhoto('浅草寺'),
+        createPhoto('涩谷路口'),
+        createVideo('东京街头录像'),
+        createPhoto('东京塔夜景', true), // 重复项
+      ]),
+      createFolder('大阪美食', [
+        createPhoto('大阪烧'),
+        createPhoto('章鱼小丸子'),
+        createVideo('道顿堀夜景')
+      ]),
+      createPhoto('机场候机'),
+      createVideo('飞行延时摄影')
+    ]),
+    createFolder('工作照片', [
+      createPhoto('会议室'),
+      createPhoto('办公桌'),
+      createOtherFile('项目文档', 'docx', '#4285f4'),
+      createOtherFile('演示文稿', 'pptx', '#ff6d01')
+    ]),
+    createFolder('RAW文件', [
+      createPhoto('专业人像01'),
+      createPhoto('风景大片'),
+      createOtherFile('lightroom预设', 'lrtemplate', '#31c5f0')
+    ]),
+    createPhoto('随手拍001'),
+    createPhoto('随手拍002'),
+    createPhoto('随手拍001', true), // 重复项
+    createVideo('生活记录'),
+    createOtherFile('软件安装包', 'exe', '#666666')
+  ]);
+
+  // 初始化状态
+  state.currentFolder = rootData;
+  state.history = [rootData];
+  state.panes.primary = rootData;
+
+  // DOM工具
+  const $ = id => document.getElementById(id);
+  const $$ = selector => document.querySelectorAll(selector);
+
+  // 工具函数
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  function formatDate(date) {
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  }
+
+  // 获取当前文件夹内容
+  function getFolderItems(folder) {
+    if (!folder || !folder.children) return [];
+    return folder.children;
+  }
+
+  // 渲染瓦片项目
+  function renderTile(item) {
+    const tile = document.createElement('div');
+    tile.className = 'relative group cursor-pointer';
+    tile.dataset.id = item.id;
+    tile.dataset.type = item.type;
+
+    const isSelected = state.selectedItems.has(item.id);
+
+    if (item.type === 'folder') {
+      tile.innerHTML = `
+        <div class="folder-tile border border-win-border rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 transition-all duration-200 flex flex-col ${isSelected ? 'ring-2 ring-brand' : ''}">
+          <div class="flex-1 flex items-center justify-center p-4">
+            <ion-icon name="folder" class="text-3xl text-blue-600"></ion-icon>
+          </div>
+          <div class="p-2 bg-white/70 border-t">
+            <div class="text-xs font-medium truncate" title="${item.name}">${item.name}</div>
+            <div class="text-xs text-win-textSecondary">${item.itemCount} 项</div>
+          </div>
+        </div>
+      `;
+    } else if (item.type === 'image') {
+      tile.innerHTML = `
+        <div class="photo-tile border border-win-border rounded-lg overflow-hidden bg-white hover:border-brand transition-all duration-200 ${isSelected ? 'ring-2 ring-brand' : ''}">
+          <div class="relative aspect-square">
+            <img src="${item.thumbnail}" alt="${item.name}" class="w-full h-full object-cover">
+            ${item.isDuplicate ? '<div class="absolute top-1 right-1 w-2 h-2 bg-orange-500 rounded-full duplicate-indicator" title="重复项"></div>' : ''}
+            <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200"></div>
+          </div>
+          <div class="p-1">
+            <div class="text-xs truncate" title="${item.name}">${item.name}</div>
+          </div>
+        </div>
+      `;
+    } else if (item.type === 'video') {
+      tile.innerHTML = `
+        <div class="photo-tile border border-win-border rounded-lg overflow-hidden bg-white hover:border-brand transition-all duration-200 ${isSelected ? 'ring-2 ring-brand' : ''}">
+          <div class="relative aspect-square">
+            <img src="${item.thumbnail}" alt="${item.name}" class="w-full h-full object-cover">
+            <div class="absolute inset-0 bg-black/20 flex items-center justify-center">
+              <div class="w-8 h-8 bg-black/60 rounded-full flex items-center justify-center">
+                <ion-icon name="play" class="text-white text-sm ml-0.5"></ion-icon>
+              </div>
+            </div>
+            <div class="absolute bottom-1 right-1 px-1 py-0.5 bg-black/70 text-white text-xs rounded">
+              ${Math.floor(item.duration / 60)}:${(item.duration % 60).toString().padStart(2, '0')}
+            </div>
+          </div>
+          <div class="p-1">
+            <div class="text-xs truncate" title="${item.name}">${item.name}</div>
+          </div>
+        </div>
+      `;
+    } else {
+      tile.innerHTML = `
+        <div class="photo-tile border border-win-border rounded-lg overflow-hidden bg-white hover:border-gray-300 transition-all duration-200 opacity-60">
+          <div class="relative aspect-square flex items-center justify-center" style="background-color: ${item.color}">
+            <div class="text-white font-bold text-sm">${item.ext.toUpperCase()}</div>
+          </div>
+          <div class="p-1">
+            <div class="text-xs truncate" title="${item.name}">${item.name}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    return tile;
+  }
+
+  // 渲染列表项目
+  function renderListItem(item) {
+    const row = document.createElement('div');
+    row.className = `grid grid-cols-12 gap-4 px-3 py-2 border-b border-win-border hover:bg-win-hover cursor-pointer ${state.selectedItems.has(item.id) ? 'bg-win-active' : ''}`;
+    row.dataset.id = item.id;
+    row.dataset.type = item.type;
+
+    const iconName = item.type === 'folder' ? 'folder-outline' :
+                     item.type === 'image' ? 'image-outline' :
+                     item.type === 'video' ? 'videocam-outline' : 'document-outline';
+
+    row.innerHTML = `
+      <div class="col-span-5 flex items-center gap-2 min-w-0">
+        <ion-icon name="${iconName}" class="text-win-textSecondary flex-shrink-0"></ion-icon>
+        <span class="truncate" title="${item.name}">${item.name}</span>
+        ${item.isDuplicate ? '<span class="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0" title="重复项"></span>' : ''}
+      </div>
+      <div class="col-span-2 text-sm text-win-textSecondary">${formatDate(item.date)}</div>
+      <div class="col-span-2 text-sm text-win-textSecondary">${item.type === 'folder' ? '文件夹' : item.type === 'image' ? '图片' : item.type === 'video' ? '视频' : item.ext?.toUpperCase() || '文件'}</div>
+      <div class="col-span-2 text-sm text-win-textSecondary">${item.type === 'folder' ? `${item.itemCount} 项` : formatFileSize(item.size)}</div>
+      <div class="col-span-1 text-sm text-win-textSecondary">${item.tags ? item.tags.join(', ') : ''}</div>
+    `;
+
+    return row;
+  }
+
+  // 渲染面包屑
+  function renderBreadcrumb() {
+    const breadcrumb = $('breadcrumb');
+    breadcrumb.innerHTML = '';
+
+    state.history.slice(0, state.historyIndex + 1).forEach((folder, index) => {
+      if (index > 0) {
+        const separator = document.createElement('span');
+        separator.innerHTML = '<ion-icon name="chevron-forward-outline"></ion-icon>';
+        separator.className = 'text-win-textSecondary text-xs';
+        breadcrumb.appendChild(separator);
+      }
+
+      const crumb = document.createElement('button');
+      crumb.textContent = folder.name;
+      crumb.className = `px-2 py-1 rounded text-sm hover:bg-gray-200 ${index === state.historyIndex ? 'text-win-text font-medium' : 'text-win-textSecondary'}`;
+
+      if (index < state.historyIndex) {
+        crumb.onclick = () => navigateToHistory(index);
+      }
+
+      breadcrumb.appendChild(crumb);
+    });
+  }
+
+  // 布局管理
+  function updateLayout() {
+    const container = $('workspaceContainer');
+    const splitter = $('splitter');
+    const secondaryPane = $('secondaryPane');
+    const previewPane = $('previewPane');
+
+    // 重置所有面板
+    splitter.classList.add('hidden');
+    secondaryPane.classList.add('hidden');
+
+    if (state.showPreview) {
+      previewPane.classList.remove('hidden');
+    } else {
+      previewPane.classList.add('hidden');
+    }
+
+    switch (state.layout) {
+      case 'single':
+        container.style.gridTemplateColumns = state.showPreview ? '1fr 320px' : '1fr';
+        container.style.gridTemplateRows = '1fr';
+        break;
+
+      case 'dual-h':
+        splitter.classList.remove('hidden');
+        secondaryPane.classList.remove('hidden');
+        splitter.classList.remove('vertical');
+        container.style.gridTemplateColumns = state.showPreview ? '1fr 6px 1fr 320px' : '1fr 6px 1fr';
+        container.style.gridTemplateRows = '1fr';
+        break;
+
+      case 'dual-v':
+        splitter.classList.remove('hidden');
+        secondaryPane.classList.remove('hidden');
+        splitter.classList.add('vertical');
+        container.style.gridTemplateColumns = state.showPreview ? '1fr 320px' : '1fr';
+        container.style.gridTemplateRows = '1fr 6px 1fr';
+        break;
+    }
+  }
+
+  // 渲染内容
+  function renderContent() {
+    const items = getFolderItems(state.currentFolder);
+
+    if (state.viewMode === 'tiles') {
+      $('tilesView').classList.remove('hidden');
+      $('listView').classList.add('hidden');
+
+      const tilesContainer = $('tilesView');
+      tilesContainer.innerHTML = '';
+
+      if (items.length === 0) {
+        $('emptyState').classList.remove('hidden');
+        return;
+      } else {
+        $('emptyState').classList.add('hidden');
+      }
+
+      items.forEach(item => {
+        const tile = renderTile(item);
+        tilesContainer.appendChild(tile);
+      });
+    } else {
+      $('tilesView').classList.add('hidden');
+      $('listView').classList.remove('hidden');
+
+      const listContainer = $('listContent');
+      listContainer.innerHTML = '';
+
+      if (items.length === 0) {
+        $('emptyState').classList.remove('hidden');
+        return;
+      } else {
+        $('emptyState').classList.add('hidden');
+      }
+
+      items.forEach(item => {
+        const row = renderListItem(item);
+        listContainer.appendChild(row);
+      });
+    }
+
+    updateStats();
+    updateNavigationButtons();
+  }
+
+  // 更新统计信息
+  function updateStats() {
+    const items = getFolderItems(state.currentFolder);
+    $('totalItems').textContent = `${items.length} 项`;
+
+    const selectedCount = state.selectedItems.size;
+    if (selectedCount === 0) {
+      $('selectionInfo').textContent = '未选择';
+    } else {
+      $('selectionInfo').textContent = `已选择 ${selectedCount} 项`;
+    }
+
+    // 统计重复项
+    let duplicateCount = 0;
+    function countDuplicates(folder) {
+      if (!folder.children) return;
+      folder.children.forEach(item => {
+        if (item.isDuplicate) duplicateCount++;
+        if (item.type === 'folder') countDuplicates(item);
+      });
+    }
+    countDuplicates(rootData);
+    $('duplicateCount').textContent = duplicateCount;
+  }
+
+  // 导航功能
+  function navigateToFolder(folder) {
+    state.currentFolder = folder;
+    state.history = state.history.slice(0, state.historyIndex + 1);
+    state.history.push(folder);
+    state.historyIndex = state.history.length - 1;
+    state.selectedItems.clear();
+
+    renderBreadcrumb();
+    renderContent();
+  }
+
+  function navigateToHistory(index) {
+    state.historyIndex = index;
+    state.currentFolder = state.history[index];
+    state.selectedItems.clear();
+
+    renderBreadcrumb();
+    renderContent();
+  }
+
+  function goBack() {
+    if (state.historyIndex > 0) {
+      state.historyIndex--;
+      state.currentFolder = state.history[state.historyIndex];
+      state.selectedItems.clear();
+      renderBreadcrumb();
+      renderContent();
+    }
+  }
+
+  function goForward() {
+    if (state.historyIndex < state.history.length - 1) {
+      state.historyIndex++;
+      state.currentFolder = state.history[state.historyIndex];
+      state.selectedItems.clear();
+      renderBreadcrumb();
+      renderContent();
+    }
+  }
+
+  function goUp() {
+    if (state.historyIndex > 0) {
+      goBack();
+    }
+  }
+
+  function updateNavigationButtons() {
+    $('btnBack').disabled = state.historyIndex === 0;
+    $('btnForward').disabled = state.historyIndex === state.history.length - 1;
+    $('btnUp').disabled = state.historyIndex === 0;
+  }
+
+  // 设置缩略图大小
+  function setTileSize(size) {
+    state.tileSize = size;
+    document.documentElement.style.setProperty('--tile-size', size + 'px');
+
+    // 更新按钮状态
+    $$('.size-btn').forEach(btn => btn.classList.remove('active'));
+    $$(`[data-size="${size}"]`).forEach(btn => btn.classList.add('active'));
+  }
+
+  // 事件处理
+  function handleItemClick(e) {
+    const itemElement = e.target.closest('[data-id]');
+    if (!itemElement) return;
+
+    const itemId = itemElement.dataset.id;
+    const item = findItemById(itemId);
+    if (!item) return;
+
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl/Cmd + 点击 = 多选
+      if (state.selectedItems.has(itemId)) {
+        state.selectedItems.delete(itemId);
+      } else {
+        state.selectedItems.add(itemId);
+      }
+      renderContent();
+    } else {
+      // 普通点击 = 单选
+      state.selectedItems.clear();
+      state.selectedItems.add(itemId);
+      renderContent();
+    }
+  }
+
+  function handleItemDoubleClick(e) {
+    const itemElement = e.target.closest('[data-id]');
+    if (!itemElement) return;
+
+    const itemId = itemElement.dataset.id;
+    const item = findItemById(itemId);
+    if (!item) return;
+
+    if (item.type === 'folder') {
+      navigateToFolder(item);
+    } else if (item.type === 'image' || item.type === 'video') {
+      showPreview(item);
+    }
+  }
+
+  function findItemById(id) {
+    function search(folder) {
+      if (!folder.children) return null;
+      for (const item of folder.children) {
+        if (item.id === id) return item;
+        if (item.type === 'folder') {
+          const found = search(item);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+    return search(rootData);
+  }
+
+  // 预览功能
+  function showPreview(item) {
+    if (item.type === 'image') {
+      $('previewImage').src = item.src;
+      $('previewImage').classList.remove('hidden');
+      $('previewVideo').classList.add('hidden');
+      updatePreviewInfo(item);
+      $('previewModal').classList.remove('hidden');
+    } else if (item.type === 'video') {
+      $('previewVideo').poster = item.thumbnail;
+      $('previewVideo').classList.remove('hidden');
+      $('previewImage').classList.add('hidden');
+      updatePreviewInfo(item);
+      $('previewModal').classList.remove('hidden');
+    }
+  }
+
+  function updatePreviewInfo(item) {
+    $('photoName').textContent = item.name;
+    $('photoSize').textContent = item.type === 'image' ? `${item.width} × ${item.height}` : '视频';
+    $('photoDate').textContent = formatDate(item.date);
+    $('photoFileSize').textContent = formatFileSize(item.size);
+
+    if (item.exif && item.type === 'image') {
+      $('cameraInfo').textContent = `${item.exif.camera} · ${item.exif.fNumber} · ${item.exif.exposureTime} · ${item.exif.iso}`;
+      $('cameraInfo').classList.remove('hidden');
+    } else {
+      $('cameraInfo').classList.add('hidden');
+    }
+  }
+
+  function closePreview() {
+    $('previewModal').classList.add('hidden');
+    if ($('previewVideo')) {
+      $('previewVideo').pause();
+    }
+  }
+
+  // 初始化应用
+  function initializeApp() {
+    // 设置初始状态
+    setTileSize(state.tileSize);
+    updateLayout();
+    renderBreadcrumb();
+    renderContent();
+
+    // 绑定导航事件
+    $('btnBack').onclick = goBack;
+    $('btnForward').onclick = goForward;
+    $('btnUp').onclick = goUp;
+
+    // 绑定布局切换事件
+    $('layoutSingle').onclick = () => {
+      state.layout = 'single';
+      $$('[id^="layout"]').forEach(btn => btn.classList.remove('active'));
+      $('layoutSingle').classList.add('active');
+      updateLayout();
+    };
+
+    $('layoutDualH').onclick = () => {
+      state.layout = 'dual-h';
+      $$('[id^="layout"]').forEach(btn => btn.classList.remove('active'));
+      $('layoutDualH').classList.add('active');
+      updateLayout();
+    };
+
+    $('layoutDualV').onclick = () => {
+      state.layout = 'dual-v';
+      $$('[id^="layout"]').forEach(btn => btn.classList.remove('active'));
+      $('layoutDualV').classList.add('active');
+      updateLayout();
+    };
+
+    // 绑定视图切换事件
+    $('viewTiles').onclick = () => {
+      state.viewMode = 'tiles';
+      $('viewTiles').classList.add('active');
+      $('viewList').classList.remove('active');
+      renderContent();
+    };
+
+    $('viewList').onclick = () => {
+      state.viewMode = 'list';
+      $('viewList').classList.add('active');
+      $('viewTiles').classList.remove('active');
+      renderContent();
+    };
+
+    // 绑定缩略图大小事件
+    $$('.size-btn').forEach(btn => {
+      btn.onclick = () => {
+        const size = parseInt(btn.dataset.size);
+        setTileSize(size);
+      };
+    });
+
+    // 绑定预览窗格切换
+    $('showPreviewPane').onchange = (e) => {
+      state.showPreview = e.target.checked;
+      updateLayout();
+    };
+
+    // 绑定搜索功能
+    $('btnSearch').onclick = () => {
+      const searchBox = $('searchBox');
+      if (searchBox.classList.contains('hidden')) {
+        searchBox.classList.remove('hidden');
+        $('searchInput').focus();
+      } else {
+        searchBox.classList.add('hidden');
+      }
+    };
+
+    // 绑定内容区点击事件
+    $('primaryPane').addEventListener('click', handleItemClick);
+    $('primaryPane').addEventListener('dblclick', handleItemDoubleClick);
+
+    // 绑定预览关闭事件
+    $('btnPreviewClose').onclick = closePreview;
+    $('previewModal').onclick = (e) => {
+      if (e.target === $('previewModal')) {
+        closePreview();
+      }
+    };
+
+    // 绑定文件操作按钮
+    $('btnCut').onclick = () => {
+      if (state.selectedItems.size === 0) return;
+      const items = Array.from(state.selectedItems).map(id => findItemById(id)).filter(Boolean);
+      state.clipboard = { action: 'cut', items };
+      alert('已剪切选中项目');
+    };
+
+    $('btnCopy').onclick = () => {
+      if (state.selectedItems.size === 0) return;
+      const items = Array.from(state.selectedItems).map(id => findItemById(id)).filter(Boolean);
+      state.clipboard = { action: 'copy', items };
+      alert('已复制选中项目');
+    };
+
+    $('btnPaste').onclick = () => {
+      if (!state.clipboard) return;
+      alert(`已${state.clipboard.action === 'cut' ? '移动' : '复制'} ${state.clipboard.items.length} 个项目`);
+    };
+
+    $('btnRename').onclick = () => {
+      if (state.selectedItems.size !== 1) {
+        alert('请选择一个项目进行重命名');
+        return;
+      }
+      const item = findItemById(Array.from(state.selectedItems)[0]);
+      const newName = prompt('重命名为:', item.name);
+      if (newName && newName !== item.name) {
+        item.name = newName;
+        renderContent();
+      }
+    };
+
+    $('btnDelete').onclick = () => {
+      if (state.selectedItems.size === 0) return;
+      if (confirm(`确定要删除选中的 ${state.selectedItems.size} 个项目吗？`)) {
+        alert('删除功能演示');
+        state.selectedItems.clear();
+        renderContent();
+      }
+    };
+
+    $('btnTags').onclick = () => {
+      if (state.selectedItems.size === 0) return;
+      alert('编辑标签功能演示');
+    };
+
+    $('btnAlbum').onclick = () => {
+      if (state.selectedItems.size === 0) return;
+      alert('加入相册功能演示');
+    };
+
+    $('btnBatchEdit').onclick = () => {
+      if (state.selectedItems.size === 0) return;
+      alert('批量编辑EXIF功能演示');
+    };
+
+    $('btnDuplicates').onclick = () => {
+      alert('查看重复项功能演示');
+    };
+
+    // 绑定键盘快捷键
+    document.addEventListener('keydown', (e) => {
+      if (e.target.matches('input, textarea')) return;
+
+      if (e.key === 'Escape') {
+        if (!$('previewModal').classList.contains('hidden')) {
+          closePreview();
+        } else {
+          state.selectedItems.clear();
+          renderContent();
+        }
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        goUp();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        const items = getFolderItems(state.currentFolder);
+        items.forEach(item => state.selectedItems.add(item.id));
+        renderContent();
+      } else if (e.altKey && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goBack();
+      } else if (e.altKey && e.key === 'ArrowRight') {
+        e.preventDefault();
+        goForward();
+      }
+    });
+  }
+
+  // 页面加载完成后初始化
+  document.addEventListener('DOMContentLoaded', initializeApp);
+  </script>
+</body>
+</html>
+            ${item.isDuplicate ? '<div class="absolute top-2 right-2 w-3 h-3 bg-orange-500 rounded-full duplicate-indicator" title="重复项"></div>' : ''}
+            <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200"></div>
+            <!-- 选择框 -->
+            <div class="absolute top-2 left-2 w-5 h-5 border-2 border-white rounded ${selectedItems.has(item.id) ? 'bg-brand border-brand' : 'bg-black/20'} flex items-center justify-center">
+              ${selectedItems.has(item.id) ? '<ion-icon name="checkmark" class="text-white text-xs"></ion-icon>' : ''}
+            </div>
+          </div>
+          <div class="p-2">
+            <div class="text-xs font-medium truncate" title="${item.name}">${item.name}</div>
+          </div>
+        </div>
+      `;
+    } else if (item.type === 'video') {
+      tile.className += ' photo-tile';
+      tile.innerHTML = `
+        <div class="photo-tile border-2 border-slate-200 rounded-xl overflow-hidden bg-white hover:border-brand transition-all duration-200 ${selectedItems.has(item.id) ? 'ring-2 ring-brand border-brand' : ''}">
+          <div class="relative aspect-square">
+            <img src="${item.thumbnail}" alt="${item.name}" class="w-full h-full object-cover">
+            <div class="absolute inset-0 bg-black/20 flex items-center justify-center">
+              <div class="w-12 h-12 bg-black/60 rounded-full flex items-center justify-center">
+                <ion-icon name="play" class="text-white text-xl ml-1"></ion-icon>
+              </div>
+            </div>
+            <div class="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/70 text-white text-xs rounded">
+              ${Math.floor(item.duration / 60)}:${(item.duration % 60).toString().padStart(2, '0')}
+            </div>
+            <!-- 选择框 -->
+            <div class="absolute top-2 left-2 w-5 h-5 border-2 border-white rounded ${selectedItems.has(item.id) ? 'bg-brand border-brand' : 'bg-black/20'} flex items-center justify-center">
+              ${selectedItems.has(item.id) ? '<ion-icon name="checkmark" class="text-white text-xs"></ion-icon>' : ''}
+            </div>
+          </div>
+          <div class="p-2">
+            <div class="text-xs font-medium truncate" title="${item.name}">${item.name}</div>
+          </div>
+        </div>
+      `;
+    } else if (item.type === 'other') {
+      tile.className += ' photo-tile';
+      tile.innerHTML = `
+        <div class="photo-tile border-2 border-slate-200 rounded-xl overflow-hidden bg-white hover:border-slate-300 transition-all duration-200 opacity-60">
+          <div class="relative aspect-square flex items-center justify-center" style="background-color: ${item.color}">
+            <div class="text-white font-bold text-lg">${item.ext.toUpperCase()}</div>
+          </div>
+          <div class="p-2">
+            <div class="text-xs font-medium truncate" title="${item.name}">${item.name}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    return tile;
+  }
+
+  // 渲染内容网格
+  function renderContent() {
+    const items = getVisibleItems();
+    const grid = $('#contentGrid');
+    const emptyState = $('#emptyState');
+
+    if (items.length === 0) {
+      grid.style.display = 'none';
+      emptyState.classList.remove('hidden');
+      return;
+    }
+
+    grid.style.display = 'grid';
+    emptyState.classList.add('hidden');
+    grid.innerHTML = '';
+
+    items.forEach(item => {
+      const tile = renderTile(item);
+      grid.appendChild(tile);
+    });
+
+    updateStats();
+  }
+
+  // 更新统计信息
+  function updateStats() {
+    const items = getVisibleItems();
+    const photos = items.filter(item => item.type === 'image').length;
+    const videos = items.filter(item => item.type === 'video').length;
+    const folders = items.filter(item => item.type === 'folder').length;
+
+    $('#totalItems').textContent = `共 ${items.length} 项`;
+    $('#photoCount').textContent = `照片 ${photos}`;
+    $('#videoCount').textContent = `视频 ${videos}`;
+    $('#folderCount').textContent = `文件夹 ${folders}`;
+
+    // 统计所有重复项
+    const allDuplicates = getAllDuplicates();
+    $('#duplicateCount').textContent = allDuplicates.length;
+
+    updateSelectionTools();
+  }
+
+  // 获取所有重复项
+  function getAllDuplicates() {
+    const duplicates = [];
+    function findDuplicates(folder) {
+      if (!folder.children) return;
+      folder.children.forEach(item => {
+        if (item.isDuplicate) duplicates.push(item);
+        if (item.type === 'folder') findDuplicates(item);
+      });
+    }
+    findDuplicates(rootData);
+    return duplicates;
+  }
+
+  // 更新选择工具栏
+  function updateSelectionTools() {
+    const count = selectedItems.size;
+    const selectionTools = $('#selectionTools');
+    const selectionCount = $('#selectionCount');
+
+    if (count === 0) {
+      selectionCount.textContent = '未选择';
+      selectionTools.className = 'flex items-center gap-1 opacity-50';
+      $$('#selectionTools button').forEach(btn => btn.disabled = true);
+    } else {
+      selectionCount.textContent = `已选择 ${count} 项`;
+      selectionTools.className = 'flex items-center gap-1 opacity-100';
+      $$('#selectionTools button').forEach(btn => btn.disabled = false);
+    }
+  }
+
+  // 导航功能
+  function navigateToFolder(folder) {
+    currentFolder = folder;
+    history = history.slice(0, historyIndex + 1);
+    history.push(folder);
+    historyIndex = history.length - 1;
+    selectedItems.clear();
+    renderBreadcrumb();
+    renderContent();
+    updateNavigationButtons();
+  }
+
+  function navigateToHistory(index) {
+    historyIndex = index;
+    currentFolder = history[index];
+    selectedItems.clear();
+    renderBreadcrumb();
+    renderContent();
+    updateNavigationButtons();
+  }
+
+  function goBack() {
+    if (historyIndex > 0) {
+      historyIndex--;
+      currentFolder = history[historyIndex];
+      selectedItems.clear();
+      renderBreadcrumb();
+      renderContent();
+      updateNavigationButtons();
+    }
+  }
+
+  function goForward() {
+    if (historyIndex < history.length - 1) {
+      historyIndex++;
+      currentFolder = history[historyIndex];
+      selectedItems.clear();
+      renderBreadcrumb();
+      renderContent();
+      updateNavigationButtons();
+    }
+  }
+
+  function goUp() {
+    if (historyIndex > 0) {
+      goBack();
+    }
+  }
+
+  function updateNavigationButtons() {
+    $('#btnBack').disabled = historyIndex === 0;
+    $('#btnForward').disabled = historyIndex === history.length - 1;
+    $('#btnUp').disabled = historyIndex === 0;
+  }
+
+  // 预览功能
+  function showPreview(item) {
+    if (item.type === 'image') {
+      $('#previewImage').src = item.src;
+      $('#previewImage').classList.remove('hidden');
+      $('#previewVideo').classList.add('hidden');
+
+      $('#photoName').textContent = item.name;
+      $('#photoSize').textContent = `${item.width} × ${item.height}`;
+      $('#photoDate').textContent = item.date.toLocaleString();
+      $('#photoFileSize').textContent = formatFileSize(item.size);
+
+      if (item.exif) {
+        $('#cameraInfo').textContent = `${item.exif.camera} · ${item.exif.fNumber} · ${item.exif.exposureTime} · ${item.exif.iso}`;
+        $('#cameraInfo').classList.remove('hidden');
+      } else {
+        $('#cameraInfo').classList.add('hidden');
+      }
+
+      $('#previewModal').classList.remove('hidden');
+    } else if (item.type === 'video') {
+      // 视频预览逻辑
+      $('#previewVideo').poster = item.thumbnail;
+      $('#previewVideo').classList.remove('hidden');
+      $('#previewImage').classList.add('hidden');
+      $('#previewModal').classList.remove('hidden');
+    }
+  }
+
+  function closePreview() {
+    $('#previewModal').classList.add('hidden');
+    $('#previewVideo').pause();
+  }
+
+  // 事件监听
+  document.addEventListener('DOMContentLoaded', function() {
+    // 导航按钮
+    $('#btnBack').onclick = goBack;
+    $('#btnForward').onclick = goForward;
+    $('#btnUp').onclick = goUp;
+
+    // 内容网格点击事件
+    $('#contentGrid').addEventListener('click', function(e) {
+      const tile = e.target.closest('[data-id]');
+      if (!tile) return;
+
+      const itemId = tile.dataset.id;
+      const itemType = tile.dataset.type;
+      const item = currentFolder.children.find(item => item.id === itemId);
+
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl/Cmd + 点击 = 多选
+        if (selectedItems.has(itemId)) {
+          selectedItems.delete(itemId);
+        } else {
+          selectedItems.add(itemId);
+        }
+        renderContent();
+      } else if (e.shiftKey) {
+        // Shift + 点击 = 范围选择
+        // TODO: 实现范围选择逻辑
+      } else {
+        // 普通点击
+        if (itemType === 'folder') {
+          navigateToFolder(item);
+        } else {
+          selectedItems.clear();
+          selectedItems.add(itemId);
+          renderContent();
+        }
+      }
+    });
+
+    // 双击事件
+    $('#contentGrid').addEventListener('dblclick', function(e) {
+      const tile = e.target.closest('[data-id]');
+      if (!tile) return;
+
+      const itemId = tile.dataset.id;
+      const item = currentFolder.children.find(item => item.id === itemId);
+
+      if (item.type === 'image' || item.type === 'video') {
+        showPreview(item);
+      } else if (item.type === 'folder') {
+        navigateToFolder(item);
+      }
+    });
+
+    // 预览关闭
+    $('#btnPreviewClose').onclick = closePreview;
+    $('#previewModal').addEventListener('click', function(e) {
+      if (e.target === this) closePreview();
+    });
+
+    // 视图选项
+    ['showPhotos', 'showVideos', 'showFolders', 'showOthers'].forEach(option => {
+      $(`#${option}`).onchange = function() {
+        viewOptions[option] = this.checked;
+        renderContent();
+      };
+    });
+
+    // 缩略图大小
+    $('#tileSize').oninput = function() {
+      document.documentElement.style.setProperty('--tile-size', this.value + 'px');
+    };
+
+    // 初始化
+    renderBreadcrumb();
+    renderContent();
+    updateNavigationButtons();
+  });
+
+  // 键盘快捷键
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      if (!$('#previewModal').classList.contains('hidden')) {
+        closePreview();
+      } else {
+        selectedItems.clear();
+        renderContent();
+      }
+    } else if (e.key === 'Backspace' && !e.target.matches('input')) {
+      e.preventDefault();
+      goUp();
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !e.target.matches('input')) {
+      e.preventDefault();
+      const items = getVisibleItems();
+      items.forEach(item => selectedItems.add(item.id));
+      renderContent();
+    }
+  });
+  </script>
+</body>
+</html>

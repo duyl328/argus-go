@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Argus Photo Manager - Light Design</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'inter': ['Inter', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+    <style>
+        * {
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+        .pane-splitter {
+            user-select: none;
+        }
+        .pane-splitter.horizontal {
+            cursor: col-resize;
+        }
+        .pane-splitter.vertical {
+            cursor: row-resize;
+        }
+        .pane-splitter:hover {
+            background-color: #e5e7eb;
+        }
+        .pane-splitter.dragging {
+            background-color: #3b82f6;
+        }
+        .breadcrumb-item {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .breadcrumb-item:hover {
+            background-color: #f3f4f6;
+            color: #3b82f6;
+        }
+        .folder-item, .photo-item {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .folder-item:hover, .photo-item:hover {
+            background-color: #f9fafb;
+            transform: translateY(-1px);
+        }
+        .folder-item:active, .photo-item:active {
+            transform: translateY(0);
+        }
+        .grid-small {
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+        }
+        .grid-medium {
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        }
+        .grid-large {
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        }
+        .list-view {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+        .list-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: white;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .list-item:hover {
+            background-color: #f9fafb;
+        }
+        .breadcrumb-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 50;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            min-width: 200px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+        }
+        .breadcrumb-dropdown.show {
+            display: block;
+        }
+        .breadcrumb-dropdown-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+        .breadcrumb-dropdown-item:hover {
+            background-color: #f3f4f6;
+        }
+        .breadcrumb-separator {
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            position: relative;
+        }
+        .breadcrumb-separator:hover {
+            background-color: #f3f4f6;
+        }
+        .path-input-container {
+            position: relative;
+        }
+        .path-input {
+            display: none;
+            min-width: 300px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        }
+        .path-input.active {
+            display: block;
+        }
+        .breadcrumb-area {
+            border-radius: 6px;
+            padding: 4px 8px;
+            transition: all 0.2s ease;
+            min-width: 0;
+            flex: 1;
+        }
+        .breadcrumb-area.editing {
+            background-color: white;
+            border: 1px solid #3b82f6;
+        }
+        .path-edit-trigger {
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+        .path-edit-trigger:hover {
+            background-color: #f3f4f6;
+            border-color: #d1d5db;
+        }
+        .path-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 60;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+        .path-suggestions.show {
+            display: block;
+        }
+        .path-suggestion-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            transition: background-color 0.2s;
+            font-size: 13px;
+        }
+        .path-suggestion-item:hover,
+        .path-suggestion-item.selected {
+            background-color: #f3f4f6;
+        }
+        .edit-path-hint {
+            font-size: 11px;
+            color: #6b7280;
+            margin-left: 8px;
+        }
+        .item-selected {
+            background-color: #dbeafe !important;
+            border: 2px solid #3b82f6 !important;
+            box-shadow: 0 0 0 1px #3b82f6;
+        }
+        .item-focused {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+        }
+        .selectable-item {
+            position: relative;
+            user-select: none;
+        }
+        .selectable-item:focus {
+            outline: none;
+        }
+        .selection-rectangle {
+            position: absolute;
+            border: 2px solid #3b82f6;
+            background-color: rgba(59, 130, 246, 0.1);
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+        .content-area {
+            position: relative;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-inter">
+    <div class="h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-white border-b border-gray-200 px-4 py-3">
+            <!-- File Operations Toolbar -->
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <button class="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors" title="New Folder">
+                        <ion-icon name="add-outline" class="text-sm"></ion-icon>
+                        <span class="text-sm font-medium">New</span>
+                    </button>
+                    <div class="w-px h-6 bg-gray-300"></div>
+                    <button class="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors" title="Copy">
+                        <ion-icon name="copy-outline" class="text-sm"></ion-icon>
+                        <span class="text-sm">Copy</span>
+                    </button>
+                    <button class="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors" title="Cut">
+                        <ion-icon name="cut-outline" class="text-sm"></ion-icon>
+                        <span class="text-sm">Cut</span>
+                    </button>
+                    <button class="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors" title="Paste" disabled>
+                        <ion-icon name="clipboard-outline" class="text-sm"></ion-icon>
+                        <span class="text-sm">Paste</span>
+                    </button>
+                    <div class="w-px h-6 bg-gray-300"></div>
+                    <button class="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors" title="Rename">
+                        <ion-icon name="create-outline" class="text-sm"></ion-icon>
+                        <span class="text-sm">Rename</span>
+                    </button>
+                    <button class="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors" title="Delete">
+                        <ion-icon name="trash-outline" class="text-sm"></ion-icon>
+                        <span class="text-sm">Delete</span>
+                    </button>
+                    <div class="w-px h-6 bg-gray-300"></div>
+                    <button class="flex items-center space-x-2 px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors" title="Add to Album">
+                        <ion-icon name="albums-outline" class="text-sm"></ion-icon>
+                        <span class="text-sm">Add to Album</span>
+                    </button>
+                    <button class="flex items-center space-x-2 px-3 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors" title="Edit Tags">
+                        <ion-icon name="pricetag-outline" class="text-sm"></ion-icon>
+                        <span class="text-sm">Tags</span>
+                    </button>
+                    <button class="flex items-center space-x-2 px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors" title="Batch Edit">
+                        <ion-icon name="layers-outline" class="text-sm"></ion-icon>
+                        <span class="text-sm">Batch Edit</span>
+                    </button>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <!-- View Controls -->
+                    <div class="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+                        <button id="gridViewBtn" class="px-3 py-1 rounded bg-white shadow-sm text-sm font-medium text-gray-700" onclick="setViewMode('grid')">Grid</button>
+                        <button id="listViewBtn" class="px-3 py-1 rounded text-sm font-medium text-gray-500 hover:text-gray-700" onclick="setViewMode('list')">List</button>
+                    </div>
+                    <!-- Thumbnail Size (only show when Grid is selected) -->
+                    <div id="thumbnailSizeControls" class="flex items-center space-x-2">
+                        <span class="text-sm text-gray-600">Size:</span>
+                        <div class="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
+                            <button id="smallBtn" class="p-1 rounded hover:bg-white transition-colors" title="Small" onclick="setThumbnailSize('small')">
+                                <ion-icon name="apps-outline" class="text-sm"></ion-icon>
+                            </button>
+                            <button id="mediumBtn" class="p-1 rounded bg-white shadow-sm transition-colors" title="Medium" onclick="setThumbnailSize('medium')">
+                                <ion-icon name="grid-outline" class="text-sm"></ion-icon>
+                            </button>
+                            <button id="largeBtn" class="p-1 rounded hover:bg-white transition-colors" title="Large" onclick="setThumbnailSize('large')">
+                                <ion-icon name="square-outline" class="text-sm"></ion-icon>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Layout Toggle -->
+                    <div class="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
+                        <button id="horizontalLayoutBtn" class="p-1 rounded bg-white shadow-sm transition-colors" title="Horizontal Layout" onclick="setLayoutMode('horizontal')">
+                            <ion-icon name="resize-outline" class="text-sm"></ion-icon>
+                        </button>
+                        <button id="verticalLayoutBtn" class="p-1 rounded hover:bg-white transition-colors" title="Vertical Layout" onclick="setLayoutMode('vertical')">
+                            <ion-icon name="swap-vertical-outline" class="text-sm"></ion-icon>
+                        </button>
+                        <button id="singleLayoutBtn" class="p-1 rounded hover:bg-white transition-colors" title="Single Pane" onclick="setLayoutMode('single')">
+                            <ion-icon name="square-outline" class="text-sm"></ion-icon>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div id="mainContent" class="flex-1 flex overflow-hidden">
+            <!-- Left Pane -->
+            <div id="leftPane" class="flex-1 flex flex-col bg-white border-r border-gray-200">
+                <!-- Breadcrumb -->
+                <div id="leftBreadcrumb" class="px-4 py-2 border-b border-gray-100 bg-gray-50">
+                    <div class="flex items-center">
+                        <div class="flex items-center space-x-1">
+                            <div class="breadcrumb-area flex items-center space-x-1 text-sm" id="leftBreadcrumbArea">
+                                <div id="leftBreadcrumbContent">
+                                    <span class="breadcrumb-item px-2 py-1 rounded text-blue-600 font-medium">Home</span>
+                                </div>
+                            </div>
+                            <div class="path-edit-trigger ml-2" onclick="enterEditMode('left')" title="Edit path">
+                                <ion-icon name="create-outline" class="text-gray-500 text-sm"></ion-icon>
+                            </div>
+                        </div>
+                        <div class="path-input-container">
+                            <input type="text" id="leftPathInput" class="path-input px-3 py-2 text-sm border border-gray-300 rounded-lg" placeholder="Enter path..." onblur="exitEditMode('left')" onkeydown="handlePathInputKeydown(event, 'left')" oninput="showPathSuggestions(event, 'left')">
+                            <div class="path-suggestions" id="leftPathSuggestions">
+                                <!-- Suggestions will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content Area -->
+                <div class="flex-1 p-4 overflow-auto content-area" id="leftContentArea" onmousedown="startDragSelection(event, 'left')" onmouseup="endDragSelection(event, 'left')" onmousemove="updateDragSelection(event, 'left')" onclick="handleContentAreaClick(event, 'left')">
+                    <div id="leftContent" class="grid grid-medium gap-4">
+                        <!-- Content will be loaded here -->
+                    </div>
+                    <div id="leftSelectionRect" class="selection-rectangle"></div>
+                </div>
+            </div>
+
+            <!-- Splitter -->
+            <div id="splitter" class="w-1 bg-gray-200 pane-splitter horizontal hidden"></div>
+
+            <!-- Right Pane (hidden by default) -->
+            <div id="rightPane" class="flex-1 flex-col bg-white hidden">
+                <!-- Breadcrumb -->
+                <div id="rightBreadcrumb" class="px-4 py-2 border-b border-gray-100 bg-gray-50">
+                    <div class="flex items-center">
+                        <div class="flex items-center space-x-1">
+                            <div class="breadcrumb-area flex items-center space-x-1 text-sm" id="rightBreadcrumbArea">
+                                <div id="rightBreadcrumbContent">
+                                    <span class="breadcrumb-item px-2 py-1 rounded text-blue-600 font-medium">Home</span>
+                                </div>
+                            </div>
+                            <div class="path-edit-trigger ml-2" onclick="enterEditMode('right')" title="Edit path">
+                                <ion-icon name="create-outline" class="text-gray-500 text-sm"></ion-icon>
+                            </div>
+                        </div>
+                        <div class="path-input-container">
+                            <input type="text" id="rightPathInput" class="path-input px-3 py-2 text-sm border border-gray-300 rounded-lg" placeholder="Enter path..." onblur="exitEditMode('right')" onkeydown="handlePathInputKeydown(event, 'right')" oninput="showPathSuggestions(event, 'right')">
+                            <div class="path-suggestions" id="rightPathSuggestions">
+                                <!-- Suggestions will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content Area -->
+                <div class="flex-1 p-4 overflow-auto content-area" id="rightContentArea" onmousedown="startDragSelection(event, 'right')" onmouseup="endDragSelection(event, 'right')" onmousemove="updateDragSelection(event, 'right')" onclick="handleContentAreaClick(event, 'right')">
+                    <div id="rightContent" class="grid grid-medium gap-4">
+                        <!-- Content will be loaded here -->
+                    </div>
+                    <div id="rightSelectionRect" class="selection-rectangle"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sample data structure
+        const folderStructure = {
+            'Home': {
+                type: 'folder',
+                children: {
+                    'My Photos': {
+                        type: 'folder',
+                        children: {
+                            'Vacation 2023': {
+                                type: 'folder',
+                                children: {
+                                    'Beach': {
+                                        type: 'folder',
+                                        children: {
+                                            'photo1.jpg': { type: 'photo', size: '2.4 MB', date: '2023-07-15' },
+                                            'photo2.jpg': { type: 'photo', size: '3.1 MB', date: '2023-07-15' },
+                                            'photo3.jpg': { type: 'photo', size: '2.8 MB', date: '2023-07-16' },
+                                            'photo4.jpg': { type: 'photo', size: '4.1 MB', date: '2023-07-16' },
+                                            'photo5.jpg': { type: 'photo', size: '3.5 MB', date: '2023-07-17' },
+                                            'beach_sunset.jpg': { type: 'photo', size: '5.2 MB', date: '2023-07-17' },
+                                            'waves.jpg': { type: 'photo', size: '3.8 MB', date: '2023-07-18' },
+                                            'seashells.jpg': { type: 'photo', size: '2.1 MB', date: '2023-07-18' }
+                                        }
+                                    },
+                                    'Mountains': {
+                                        type: 'folder',
+                                        children: {
+                                            'sunrise.jpg': { type: 'photo', size: '4.2 MB', date: '2023-07-20' },
+                                            'sunset.jpg': { type: 'photo', size: '3.8 MB', date: '2023-07-20' },
+                                            'peak_view.jpg': { type: 'photo', size: '6.1 MB', date: '2023-07-21' },
+                                            'hiking_trail.jpg': { type: 'photo', size: '4.5 MB', date: '2023-07-21' },
+                                            'mountain_lake.jpg': { type: 'photo', size: '5.3 MB', date: '2023-07-22' },
+                                            'forest.jpg': { type: 'photo', size: '4.8 MB', date: '2023-07-22' }
+                                        }
+                                    },
+                                    'City Tour': {
+                                        type: 'folder',
+                                        children: {
+                                            'architecture.jpg': { type: 'photo', size: '3.2 MB', date: '2023-07-25' },
+                                            'street_art.jpg': { type: 'photo', size: '2.7 MB', date: '2023-07-25' },
+                                            'museum.jpg': { type: 'photo', size: '2.9 MB', date: '2023-07-26' },
+                                            'cafe.jpg': { type: 'photo', size: '2.3 MB', date: '2023-07-26' }
+                                        }
+                                    }
+                                }
+                            },
+                            'Family': {
+                                type: 'folder',
+                                children: {
+                                    'Birthday Party': {
+                                        type: 'folder',
+                                        children: {
+                                            'cake.jpg': { type: 'photo', size: '2.1 MB', date: '2023-08-10' },
+                                            'group_photo.jpg': { type: 'photo', size: '3.4 MB', date: '2023-08-10' },
+                                            'presents.jpg': { type: 'photo', size: '2.8 MB', date: '2023-08-10' }
+                                        }
+                                    },
+                                    'dinner.jpg': { type: 'photo', size: '2.2 MB', date: '2023-08-15' },
+                                    'family_portrait.jpg': { type: 'photo', size: '4.1 MB', date: '2023-08-20' },
+                                    'kids_playing.jpg': { type: 'photo', size: '3.3 MB', date: '2023-08-22' },
+                                    'garden.jpg': { type: 'photo', size: '2.9 MB', date: '2023-08-25' }
+                                }
+                            },
+                            'Events': {
+                                type: 'folder',
+                                children: {
+                                    'wedding.jpg': { type: 'photo', size: '5.1 MB', date: '2023-09-05' },
+                                    'graduation.jpg': { type: 'photo', size: '3.7 MB', date: '2023-09-10' },
+                                    'concert.jpg': { type: 'photo', size: '2.8 MB', date: '2023-09-15' }
+                                }
+                            }
+                        }
+                    },
+                    'Work Projects': {
+                        type: 'folder',
+                        children: {
+                            'Screenshots': {
+                                type: 'folder',
+                                children: {
+                                    'design1.png': { type: 'photo', size: '1.2 MB', date: '2023-09-01' },
+                                    'design2.png': { type: 'photo', size: '1.5 MB', date: '2023-09-02' },
+                                    'mockup.png': { type: 'photo', size: '2.1 MB', date: '2023-09-03' },
+                                    'wireframe.png': { type: 'photo', size: '0.8 MB', date: '2023-09-04' },
+                                    'prototype.png': { type: 'photo', size: '1.9 MB', date: '2023-09-05' }
+                                }
+                            },
+                            'Presentations': {
+                                type: 'folder',
+                                children: {
+                                    'slide1.jpg': { type: 'photo', size: '1.3 MB', date: '2023-09-08' },
+                                    'slide2.jpg': { type: 'photo', size: '1.1 MB', date: '2023-09-08' },
+                                    'slide3.jpg': { type: 'photo', size: '1.4 MB', date: '2023-09-08' }
+                                }
+                            }
+                        }
+                    },
+                    'Camera Roll': {
+                        type: 'folder',
+                        children: {
+                            'Recent': {
+                                type: 'folder',
+                                children: {
+                                    'IMG_010.jpg': { type: 'photo', size: '3.2 MB', date: '2023-09-25' },
+                                    'IMG_011.jpg': { type: 'photo', size: '2.9 MB', date: '2023-09-25' },
+                                    'IMG_012.jpg': { type: 'photo', size: '3.4 MB', date: '2023-09-26' },
+                                    'IMG_013.jpg': { type: 'photo', size: '4.1 MB', date: '2023-09-26' }
+                                }
+                            },
+                            'IMG_001.jpg': { type: 'photo', size: '3.2 MB', date: '2023-09-15' },
+                            'IMG_002.jpg': { type: 'photo', size: '2.9 MB', date: '2023-09-15' },
+                            'IMG_003.jpg': { type: 'photo', size: '3.4 MB', date: '2023-09-16' },
+                            'IMG_004.jpg': { type: 'photo', size: '2.7 MB', date: '2023-09-17' },
+                            'IMG_005.jpg': { type: 'photo', size: '3.8 MB', date: '2023-09-18' },
+                            'IMG_006.jpg': { type: 'photo', size: '4.2 MB', date: '2023-09-19' },
+                            'IMG_007.jpg': { type: 'photo', size: '3.1 MB', date: '2023-09-20' },
+                            'IMG_008.jpg': { type: 'photo', size: '2.8 MB', date: '2023-09-21' },
+                            'IMG_009.jpg': { type: 'photo', size: '3.6 MB', date: '2023-09-22' }
+                        }
+                    },
+                    'Archives': {
+                        type: 'folder',
+                        children: {
+                            '2022': {
+                                type: 'folder',
+                                children: {
+                                    'old_photo1.jpg': { type: 'photo', size: '2.1 MB', date: '2022-12-25' },
+                                    'old_photo2.jpg': { type: 'photo', size: '1.8 MB', date: '2022-12-31' }
+                                }
+                            },
+                            '2021': {
+                                type: 'folder',
+                                children: {
+                                    'vintage1.jpg': { type: 'photo', size: '1.5 MB', date: '2021-06-15' },
+                                    'vintage2.jpg': { type: 'photo', size: '1.9 MB', date: '2021-08-20' }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        // Application state
+        let layoutMode = 'single'; // 'single', 'horizontal', 'vertical'
+        let viewMode = 'grid'; // 'grid', 'list'
+        let thumbnailSize = 'medium'; // 'small', 'medium', 'large'
+        let leftPath = ['Home'];
+        let rightPath = ['Home'];
+        let isDragging = false;
+
+        // Selection state
+        let leftSelectedItems = new Set();
+        let rightSelectedItems = new Set();
+        let leftFocusedItem = null;
+        let rightFocusedItem = null;
+
+        // Drag selection state
+        let isDragSelecting = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let dragCurrentX = 0;
+        let dragCurrentY = 0;
+        let dragPane = null;
+
+        // Initialize the application
+        function init() {
+            loadContent('left');
+            updateBreadcrumb('left');
+            setupSplitter();
+            setupKeyboardNavigation();
+        }
+
+        // Get current folder from path
+        function getCurrentFolder(path) {
+            let current = folderStructure;
+            for (let segment of path) {
+                if (current[segment] && current[segment].children) {
+                    current = current[segment].children;
+                } else {
+                    return null;
+                }
+            }
+            return current;
+        }
+
+        // Load content for a pane
+        function loadContent(pane) {
+            const path = pane === 'left' ? leftPath : rightPath;
+            const contentElement = document.getElementById(pane + 'Content');
+            const currentFolder = getCurrentFolder(path);
+
+            // Clear selection when navigating
+            if (pane === 'left') {
+                leftSelectedItems.clear();
+                leftFocusedItem = null;
+            } else {
+                rightSelectedItems.clear();
+                rightFocusedItem = null;
+            }
+
+            if (!currentFolder) {
+                contentElement.innerHTML = '<p class="text-gray-500">Folder not found</p>';
+                return;
+            }
+
+            // Sort items: folders first, then photos
+            const items = Object.entries(currentFolder).sort(([,a], [,b]) => {
+                if (a.type === 'folder' && b.type !== 'folder') return -1;
+                if (a.type !== 'folder' && b.type === 'folder') return 1;
+                return 0;
+            });
+
+            if (viewMode === 'list') {
+                contentElement.className = 'list-view';
+                let html = '';
+
+                items.forEach(([name, item], index) => {
+                    const itemId = `${pane}-item-${index}`;
+                    if (item.type === 'folder') {
+                        html += `
+                            <div class="list-item folder-item selectable-item" data-item-name="${name}" data-item-id="${itemId}" data-pane="${pane}" tabindex="0"
+                                 onclick="handleItemClick(event, '${pane}', '${name}', ${index})"
+                                 ondblclick="navigateToFolder('${pane}', '${name}')">
+                                <ion-icon name="folder-outline" class="text-blue-500 text-lg mr-3"></ion-icon>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-700">${name}</p>
+                                    <p class="text-xs text-gray-500">Folder</p>
+                                </div>
+                            </div>
+                        `;
+                    } else if (item.type === 'photo') {
+                        html += `
+                            <div class="list-item photo-item selectable-item" data-item-name="${name}" data-item-id="${itemId}" data-pane="${pane}" tabindex="0"
+                                 onclick="handleItemClick(event, '${pane}', '${name}', ${index})">
+                                <ion-icon name="image-outline" class="text-green-500 text-lg mr-3"></ion-icon>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-700">${name}</p>
+                                    <p class="text-xs text-gray-500">${item.size} • ${item.date}</p>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+
+                contentElement.innerHTML = html;
+            } else {
+                // Grid view
+                contentElement.className = `grid grid-${thumbnailSize} gap-4`;
+                let html = '';
+
+                items.forEach(([name, item], index) => {
+                    const itemId = `${pane}-item-${index}`;
+                    if (item.type === 'folder') {
+                        html += `
+                            <div class="folder-item selectable-item bg-white rounded-lg border border-gray-200 p-4 text-center hover:shadow-md transition-all"
+                                 data-item-name="${name}" data-item-id="${itemId}" data-pane="${pane}" tabindex="0"
+                                 onclick="handleItemClick(event, '${pane}', '${name}', ${index})"
+                                 ondblclick="navigateToFolder('${pane}', '${name}')">
+                                <ion-icon name="folder-outline" class="text-blue-500 text-3xl mb-2"></ion-icon>
+                                <p class="text-sm font-medium text-gray-700 truncate">${name}</p>
+                            </div>
+                        `;
+                    } else if (item.type === 'photo') {
+                        html += `
+                            <div class="photo-item selectable-item bg-white rounded-lg border border-gray-200 p-4 text-center hover:shadow-md transition-all"
+                                 data-item-name="${name}" data-item-id="${itemId}" data-pane="${pane}" tabindex="0"
+                                 onclick="handleItemClick(event, '${pane}', '${name}', ${index})">
+                                <ion-icon name="image-outline" class="text-green-500 text-3xl mb-2"></ion-icon>
+                                <p class="text-sm font-medium text-gray-700 truncate">${name}</p>
+                                <p class="text-xs text-gray-500">${item.size}</p>
+                            </div>
+                        `;
+                    }
+                });
+
+                contentElement.innerHTML = html;
+            }
+
+            // Set default selection to first item
+            if (items.length > 0) {
+                setFocusedItem(pane, items[0][0], 0);
+            }
+        }
+
+        // Navigate to folder
+        function navigateToFolder(pane, folderName) {
+            const path = pane === 'left' ? leftPath : rightPath;
+            path.push(folderName);
+
+            loadContent(pane);
+            updateBreadcrumb(pane);
+        }
+
+        // Update breadcrumb navigation
+        function updateBreadcrumb(pane) {
+            const path = pane === 'left' ? leftPath : rightPath;
+            const breadcrumbContentElement = document.getElementById(pane + 'BreadcrumbContent');
+
+            let html = '<div class="flex items-center space-x-1">';
+
+            path.forEach((segment, index) => {
+                if (index > 0) {
+                    html += `
+                        <div class="breadcrumb-separator" onclick="showBreadcrumbDropdown('${pane}', ${index - 1})">
+                            <ion-icon name="chevron-forward-outline" class="text-gray-400 text-xs"></ion-icon>
+                            <div class="breadcrumb-dropdown" id="${pane}Dropdown${index - 1}">
+                                <!-- Dropdown content will be populated dynamically -->
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (index === path.length - 1) {
+                    html += `<span class="px-2 py-1 rounded bg-blue-100 text-blue-700 font-medium">${segment}</span>`;
+                } else {
+                    html += `<span class="breadcrumb-item px-2 py-1 rounded text-gray-600 hover:bg-gray-100" onclick="navigateToBreadcrumb('${pane}', ${index})">${segment}</span>`;
+                }
+            });
+
+            html += '</div>';
+            breadcrumbContentElement.innerHTML = html;
+        }
+
+        // Navigate via breadcrumb
+        function navigateToBreadcrumb(pane, index) {
+            const path = pane === 'left' ? leftPath : rightPath;
+
+            if (pane === 'left') {
+                leftPath = leftPath.slice(0, index + 1);
+            } else {
+                rightPath = rightPath.slice(0, index + 1);
+            }
+
+            loadContent(pane);
+            updateBreadcrumb(pane);
+        }
+
+        // Set view mode (grid/list)
+        function setViewMode(mode) {
+            viewMode = mode;
+
+            // Update button states
+            document.getElementById('gridViewBtn').className = mode === 'grid'
+                ? 'px-3 py-1 rounded bg-white shadow-sm text-sm font-medium text-gray-700'
+                : 'px-3 py-1 rounded text-sm font-medium text-gray-500 hover:text-gray-700';
+
+            document.getElementById('listViewBtn').className = mode === 'list'
+                ? 'px-3 py-1 rounded bg-white shadow-sm text-sm font-medium text-gray-700'
+                : 'px-3 py-1 rounded text-sm font-medium text-gray-500 hover:text-gray-700';
+
+            // Show/hide thumbnail size controls based on view mode
+            const thumbnailControls = document.getElementById('thumbnailSizeControls');
+            if (mode === 'grid') {
+                thumbnailControls.style.display = 'flex';
+            } else {
+                thumbnailControls.style.display = 'none';
+            }
+
+            // Reload content
+            loadContent('left');
+            if (layoutMode !== 'single') {
+                loadContent('right');
+            }
+        }
+
+        // Set thumbnail size
+        function setThumbnailSize(size) {
+            thumbnailSize = size;
+
+            // Update button states
+            ['small', 'medium', 'large'].forEach(s => {
+                document.getElementById(s + 'Btn').className = s === size
+                    ? 'p-1 rounded bg-white shadow-sm transition-colors'
+                    : 'p-1 rounded hover:bg-white transition-colors';
+            });
+
+            // Reload content if in grid mode
+            if (viewMode === 'grid') {
+                loadContent('left');
+                if (layoutMode !== 'single') {
+                    loadContent('right');
+                }
+            }
+        }
+
+        // Set layout mode
+        function setLayoutMode(mode) {
+            layoutMode = mode;
+
+            const rightPane = document.getElementById('rightPane');
+            const splitter = document.getElementById('splitter');
+            const mainContent = document.getElementById('mainContent');
+
+            // Update button states
+            ['horizontal', 'vertical', 'single'].forEach(m => {
+                const btn = document.getElementById(m + 'LayoutBtn');
+                btn.className = m === mode
+                    ? 'p-1 rounded bg-white shadow-sm transition-colors'
+                    : 'p-1 rounded hover:bg-white transition-colors';
+            });
+
+            if (mode === 'single') {
+                rightPane.classList.add('hidden');
+                rightPane.classList.remove('flex');
+                splitter.classList.add('hidden');
+                mainContent.style.flexDirection = '';
+                mainContent.style.gridTemplateColumns = '';
+                mainContent.style.gridTemplateRows = '';
+            } else if (mode === 'horizontal') {
+                rightPane.classList.remove('hidden');
+                rightPane.classList.add('flex');
+                splitter.classList.remove('hidden');
+                splitter.className = 'w-1 bg-gray-200 pane-splitter horizontal';
+                mainContent.style.flexDirection = 'row';
+                mainContent.style.gridTemplateColumns = '1fr 4px 1fr';
+                mainContent.style.gridTemplateRows = '';
+                mainContent.style.display = 'grid';
+                loadContent('right');
+                updateBreadcrumb('right');
+            } else if (mode === 'vertical') {
+                rightPane.classList.remove('hidden');
+                rightPane.classList.add('flex');
+                splitter.classList.remove('hidden');
+                splitter.className = 'h-1 bg-gray-200 pane-splitter vertical';
+                mainContent.style.flexDirection = 'column';
+                mainContent.style.gridTemplateRows = '1fr 4px 1fr';
+                mainContent.style.gridTemplateColumns = '';
+                mainContent.style.display = 'grid';
+                loadContent('right');
+                updateBreadcrumb('right');
+            }
+        }
+
+        // Setup splitter functionality
+        function setupSplitter() {
+            const splitter = document.getElementById('splitter');
+            const mainContent = document.getElementById('mainContent');
+
+            splitter.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                splitter.classList.add('dragging');
+
+                if (layoutMode === 'horizontal') {
+                    document.body.style.cursor = 'col-resize';
+                } else if (layoutMode === 'vertical') {
+                    document.body.style.cursor = 'row-resize';
+                }
+                document.body.style.userSelect = 'none';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+
+                const rect = mainContent.getBoundingClientRect();
+
+                if (layoutMode === 'horizontal') {
+                    const x = e.clientX - rect.left;
+                    const percentage = (x / rect.width) * 100;
+
+                    if (percentage > 20 && percentage < 80) {
+                        mainContent.style.gridTemplateColumns = `${percentage}% 4px 1fr`;
+                    }
+                } else if (layoutMode === 'vertical') {
+                    const y = e.clientY - rect.top;
+                    const percentage = (y / rect.height) * 100;
+
+                    if (percentage > 20 && percentage < 80) {
+                        mainContent.style.gridTemplateRows = `${percentage}% 4px 1fr`;
+                    }
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    splitter.classList.remove('dragging');
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                }
+            });
+        }
+
+        // Show breadcrumb dropdown
+        function showBreadcrumbDropdown(pane, index) {
+            // Hide all other dropdowns
+            document.querySelectorAll('.breadcrumb-dropdown').forEach(dropdown => {
+                dropdown.classList.remove('show');
+            });
+
+            const path = pane === 'left' ? leftPath : rightPath;
+            const dropdownId = `${pane}Dropdown${index}`;
+            const dropdown = document.getElementById(dropdownId);
+
+            if (!dropdown) return;
+
+            // Get folders at the specified path
+            const currentPath = path.slice(0, index + 1);
+            const currentFolder = getCurrentFolder(currentPath);
+
+            if (!currentFolder) return;
+
+            // Build dropdown content
+            let html = '';
+            Object.entries(currentFolder).forEach(([name, item]) => {
+                if (item.type === 'folder') {
+                    html += `
+                        <div class="breadcrumb-dropdown-item" onclick="navigateFromBreadcrumbDropdown('${pane}', ${index}, '${name}')">
+                            <ion-icon name="folder-outline" class="text-blue-500 text-sm mr-2"></ion-icon>
+                            <span class="text-sm">${name}</span>
+                        </div>
+                    `;
+                }
+            });
+
+            if (html === '') {
+                html = '<div class="breadcrumb-dropdown-item"><span class="text-sm text-gray-500">No folders</span></div>';
+            }
+
+            dropdown.innerHTML = html;
+            dropdown.classList.add('show');
+
+            // Hide dropdown when clicking outside
+            setTimeout(() => {
+                document.addEventListener('click', function hideDropdown(e) {
+                    if (!dropdown.contains(e.target) && !e.target.closest('.breadcrumb-separator')) {
+                        dropdown.classList.remove('show');
+                        document.removeEventListener('click', hideDropdown);
+                    }
+                });
+            }, 0);
+        }
+
+        // Navigate from breadcrumb dropdown
+        function navigateFromBreadcrumbDropdown(pane, index, folderName) {
+            const path = pane === 'left' ? leftPath : rightPath;
+            const newPath = path.slice(0, index + 1);
+            newPath.push(folderName);
+
+            if (pane === 'left') {
+                leftPath = newPath;
+            } else {
+                rightPath = newPath;
+            }
+
+            loadContent(pane);
+            updateBreadcrumb(pane);
+
+            // Hide dropdown immediately after selection
+            const dropdown = document.getElementById(`${pane}Dropdown${index}`);
+            if (dropdown) {
+                dropdown.classList.remove('show');
+            }
+        }
+
+        // Enter edit mode (address bar style)
+        function enterEditMode(pane) {
+            const breadcrumbArea = document.getElementById(pane + 'BreadcrumbArea');
+            const editTrigger = breadcrumbArea.parentElement.querySelector('.path-edit-trigger');
+            const inputElement = document.getElementById(pane + 'PathInput');
+            const path = pane === 'left' ? leftPath : rightPath;
+
+            breadcrumbArea.style.display = 'none';
+            editTrigger.style.display = 'none';
+            inputElement.classList.add('active');
+            inputElement.value = path.join('/');
+            inputElement.focus();
+            inputElement.select();
+        }
+
+        // Exit edit mode
+        function exitEditMode(pane) {
+            const breadcrumbArea = document.getElementById(pane + 'BreadcrumbArea');
+            const editTrigger = breadcrumbArea.parentElement.querySelector('.path-edit-trigger');
+            const inputElement = document.getElementById(pane + 'PathInput');
+            const suggestionsElement = document.getElementById(pane + 'PathSuggestions');
+
+            breadcrumbArea.style.display = 'flex';
+            editTrigger.style.display = 'block';
+            inputElement.classList.remove('active');
+            suggestionsElement.classList.remove('show');
+        }
+
+        // Handle path input keydown
+        function handlePathInputKeydown(event, pane) {
+            const suggestionsElement = document.getElementById(pane + 'PathSuggestions');
+            const suggestions = suggestionsElement.querySelectorAll('.path-suggestion-item');
+
+            if (event.key === 'Enter') {
+                const inputElement = document.getElementById(pane + 'PathInput');
+                const pathString = inputElement.value.trim();
+
+                if (pathString) {
+                    navigateToPath(pane, pathString);
+                }
+
+                exitEditMode(pane);
+            } else if (event.key === 'Escape') {
+                exitEditMode(pane);
+            } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                const selected = suggestionsElement.querySelector('.selected');
+                if (selected && selected.nextElementSibling) {
+                    selected.classList.remove('selected');
+                    selected.nextElementSibling.classList.add('selected');
+                } else if (suggestions.length > 0) {
+                    suggestions.forEach(s => s.classList.remove('selected'));
+                    suggestions[0].classList.add('selected');
+                }
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                const selected = suggestionsElement.querySelector('.selected');
+                if (selected && selected.previousElementSibling) {
+                    selected.classList.remove('selected');
+                    selected.previousElementSibling.classList.add('selected');
+                } else if (suggestions.length > 0) {
+                    suggestions.forEach(s => s.classList.remove('selected'));
+                    suggestions[suggestions.length - 1].classList.add('selected');
+                }
+            } else if (event.key === 'Tab' && suggestions.length > 0) {
+                event.preventDefault();
+                const selected = suggestionsElement.querySelector('.selected') || suggestions[0];
+                if (selected) {
+                    document.getElementById(pane + 'PathInput').value = selected.dataset.path;
+                }
+            }
+        }
+
+        // Show path suggestions
+        function showPathSuggestions(event, pane) {
+            const inputValue = event.target.value.trim();
+            const suggestionsElement = document.getElementById(pane + 'PathSuggestions');
+
+            if (!inputValue) {
+                suggestionsElement.classList.remove('show');
+                return;
+            }
+
+            // Get all possible paths
+            const allPaths = getAllPossiblePaths();
+            const filteredPaths = allPaths.filter(path =>
+                path.toLowerCase().includes(inputValue.toLowerCase()) && path !== inputValue
+            );
+
+            if (filteredPaths.length === 0) {
+                suggestionsElement.classList.remove('show');
+                return;
+            }
+
+            let html = '';
+            filteredPaths.slice(0, 8).forEach((path, index) => {
+                html += `
+                    <div class="path-suggestion-item ${index === 0 ? 'selected' : ''}"
+                         data-path="${path}"
+                         onclick="selectPathSuggestion('${pane}', '${path}')">
+                        <ion-icon name="folder-outline" class="text-blue-500 text-sm mr-2"></ion-icon>
+                        <span>${path}</span>
+                    </div>
+                `;
+            });
+
+            suggestionsElement.innerHTML = html;
+            suggestionsElement.classList.add('show');
+        }
+
+        // Get all possible paths
+        function getAllPossiblePaths() {
+            const paths = [];
+
+            function traverseFolder(currentPath, folder) {
+                Object.entries(folder).forEach(([name, item]) => {
+                    if (item.type === 'folder') {
+                        const newPath = currentPath ? `${currentPath}/${name}` : name;
+                        paths.push(newPath);
+                        if (item.children) {
+                            traverseFolder(newPath, item.children);
+                        }
+                    }
+                });
+            }
+
+            traverseFolder('', folderStructure);
+            return paths.sort();
+        }
+
+        // Select path suggestion
+        function selectPathSuggestion(pane, path) {
+            document.getElementById(pane + 'PathInput').value = path;
+            navigateToPath(pane, path);
+            exitEditMode(pane);
+        }
+
+        // Navigate to path
+        function navigateToPath(pane, pathString) {
+            const pathSegments = pathString.split('/').filter(segment => segment.trim() !== '');
+
+            // Always start from Home
+            if (pathSegments.length === 0 || pathSegments[0] !== 'Home') {
+                pathSegments.unshift('Home');
+            }
+
+            // Validate path exists
+            let current = folderStructure;
+            for (let i = 0; i < pathSegments.length; i++) {
+                const segment = pathSegments[i];
+                if (current[segment] && current[segment].children) {
+                    current = current[segment].children;
+                } else if (i === pathSegments.length - 1 && current[segment]) {
+                    // Last segment can be a file or folder
+                    break;
+                } else {
+                    // Invalid path
+                    alert('Path not found: ' + pathSegments.slice(0, i + 1).join('/'));
+                    return;
+                }
+            }
+
+            // Set new path
+            if (pane === 'left') {
+                leftPath = pathSegments;
+            } else {
+                rightPath = pathSegments;
+            }
+
+            loadContent(pane);
+            updateBreadcrumb(pane);
+        }
+
+        // Handle item click for selection
+        function handleItemClick(event, pane, itemName, index) {
+            event.stopPropagation();
+
+            const selectedItems = pane === 'left' ? leftSelectedItems : rightSelectedItems;
+
+            if (event.ctrlKey || event.metaKey) {
+                // Multi-select with Ctrl/Cmd
+                if (selectedItems.has(itemName)) {
+                    selectedItems.delete(itemName);
+                    removeItemSelection(pane, itemName);
+                } else {
+                    selectedItems.add(itemName);
+                    addItemSelection(pane, itemName);
+                }
+            } else {
+                // Single select - clear all previous selections first
+                clearAllSelections(pane);
+                selectedItems.add(itemName);
+                addItemSelection(pane, itemName);
+            }
+
+            setFocusedItem(pane, itemName, index);
+        }
+
+        // Set focused item
+        function setFocusedItem(pane, itemName, index) {
+            // Clear previous focus
+            document.querySelectorAll(`[data-pane="${pane}"] .item-focused`).forEach(el => {
+                el.classList.remove('item-focused');
+            });
+
+            if (pane === 'left') {
+                leftFocusedItem = { name: itemName, index: index };
+            } else {
+                rightFocusedItem = { name: itemName, index: index };
+            }
+
+            // Add focus to new item
+            const itemElement = document.querySelector(`[data-pane="${pane}"][data-item-name="${itemName}"]`);
+            if (itemElement) {
+                itemElement.classList.add('item-focused');
+                itemElement.focus();
+            }
+        }
+
+        // Add visual selection to item
+        function addItemSelection(pane, itemName) {
+            const itemElement = document.querySelector(`[data-pane="${pane}"][data-item-name="${itemName}"]`);
+            if (itemElement) {
+                itemElement.classList.add('item-selected');
+            }
+        }
+
+        // Remove visual selection from item
+        function removeItemSelection(pane, itemName) {
+            const itemElement = document.querySelector(`[data-pane="${pane}"][data-item-name="${itemName}"]`);
+            if (itemElement) {
+                itemElement.classList.remove('item-selected');
+            }
+        }
+
+        // Clear all selections in a pane
+        function clearAllSelections(pane) {
+            const selectedItems = pane === 'left' ? leftSelectedItems : rightSelectedItems;
+            selectedItems.forEach(itemName => {
+                removeItemSelection(pane, itemName);
+            });
+            selectedItems.clear();
+        }
+
+        // Setup keyboard navigation
+        function setupKeyboardNavigation() {
+            document.addEventListener('keydown', (event) => {
+                const activePane = getActivePane();
+                if (!activePane) return;
+
+                const items = getVisibleItems(activePane);
+                if (items.length === 0) return;
+
+                const focusedItem = activePane === 'left' ? leftFocusedItem : rightFocusedItem;
+                if (!focusedItem) return;
+
+                let newIndex = focusedItem.index;
+
+                switch (event.key) {
+                    case 'ArrowUp':
+                        event.preventDefault();
+                        if (viewMode === 'list') {
+                            newIndex = Math.max(0, focusedItem.index - 1);
+                        } else {
+                            // Grid view - move up by number of columns
+                            const cols = getGridColumns();
+                            newIndex = Math.max(0, focusedItem.index - cols);
+                        }
+                        break;
+                    case 'ArrowDown':
+                        event.preventDefault();
+                        if (viewMode === 'list') {
+                            newIndex = Math.min(items.length - 1, focusedItem.index + 1);
+                        } else {
+                            // Grid view - move down by number of columns
+                            const cols = getGridColumns();
+                            newIndex = Math.min(items.length - 1, focusedItem.index + cols);
+                        }
+                        break;
+                    case 'ArrowLeft':
+                        if (viewMode === 'grid') {
+                            event.preventDefault();
+                            newIndex = Math.max(0, focusedItem.index - 1);
+                        }
+                        break;
+                    case 'ArrowRight':
+                        if (viewMode === 'grid') {
+                            event.preventDefault();
+                            newIndex = Math.min(items.length - 1, focusedItem.index + 1);
+                        }
+                        break;
+                    case 'Enter':
+                        event.preventDefault();
+                        const currentItem = items[focusedItem.index];
+                        if (currentItem && currentItem.type === 'folder') {
+                            navigateToFolder(activePane, currentItem.name);
+                        }
+                        break;
+                    case ' ':
+                        event.preventDefault();
+                        const selectedItems = activePane === 'left' ? leftSelectedItems : rightSelectedItems;
+                        const currentItemName = items[focusedItem.index].name;
+                        if (selectedItems.has(currentItemName)) {
+                            selectedItems.delete(currentItemName);
+                            removeItemSelection(activePane, currentItemName);
+                        } else {
+                            selectedItems.add(currentItemName);
+                            addItemSelection(activePane, currentItemName);
+                        }
+                        break;
+                }
+
+                if (newIndex !== focusedItem.index && (event.key.startsWith('Arrow') || event.key === 'Enter')) {
+                    const newItem = items[newIndex];
+                    if (newItem) {
+                        setFocusedItem(activePane, newItem.name, newIndex);
+
+                        // Auto-select on navigation if no items are selected
+                        const selectedItems = activePane === 'left' ? leftSelectedItems : rightSelectedItems;
+                        if (selectedItems.size === 0) {
+                            selectedItems.add(newItem.name);
+                            addItemSelection(activePane, newItem.name);
+                        }
+                    }
+                }
+            });
+        }
+
+        // Get currently active pane
+        function getActivePane() {
+            const leftPane = document.getElementById('leftPane');
+            const rightPane = document.getElementById('rightPane');
+
+            if (document.activeElement && leftPane.contains(document.activeElement)) {
+                return 'left';
+            } else if (document.activeElement && rightPane.contains(document.activeElement)) {
+                return 'right';
+            } else {
+                // Default to left pane
+                return 'left';
+            }
+        }
+
+        // Get visible items in current folder
+        function getVisibleItems(pane) {
+            const path = pane === 'left' ? leftPath : rightPath;
+            const currentFolder = getCurrentFolder(path);
+
+            if (!currentFolder) return [];
+
+            // Sort items: folders first, then photos
+            const items = Object.entries(currentFolder).sort(([,a], [,b]) => {
+                if (a.type === 'folder' && b.type !== 'folder') return -1;
+                if (a.type !== 'folder' && b.type === 'folder') return 1;
+                return 0;
+            });
+
+            return items.map(([name, item], index) => ({ name, type: item.type, index }));
+        }
+
+        // Get number of columns in grid view
+        function getGridColumns() {
+            const contentElement = document.getElementById('leftContent');
+            if (!contentElement) return 4;
+
+            const computedStyle = window.getComputedStyle(contentElement);
+            const gridCols = computedStyle.gridTemplateColumns;
+
+            if (gridCols && gridCols !== 'none') {
+                return gridCols.split(' ').length;
+            }
+
+            // Fallback based on thumbnail size
+            switch (thumbnailSize) {
+                case 'small': return 8;
+                case 'medium': return 6;
+                case 'large': return 4;
+                default: return 4;
+            }
+        }
+
+        // Start drag selection
+        function startDragSelection(event, pane) {
+            // Only start drag selection if clicking on empty area (not on an item)
+            if (event.target.closest('.selectable-item')) {
+                return;
+            }
+
+            isDragSelecting = true;
+            dragPane = pane;
+
+            const contentArea = document.getElementById(pane + 'ContentArea');
+            const rect = contentArea.getBoundingClientRect();
+
+            dragStartX = event.clientX - rect.left + contentArea.scrollLeft;
+            dragStartY = event.clientY - rect.top + contentArea.scrollTop;
+            dragCurrentX = dragStartX;
+            dragCurrentY = dragStartY;
+
+            // Store the initial event for later use
+            window.dragEvent = event;
+
+            // Clear previous selections if not holding Ctrl
+            if (!event.ctrlKey && !event.metaKey) {
+                clearAllSelections(pane);
+            }
+
+            event.preventDefault();
+        }
+
+        // Update drag selection
+        function updateDragSelection(event, pane) {
+            if (!isDragSelecting || dragPane !== pane) {
+                return;
+            }
+
+            const contentArea = document.getElementById(pane + 'ContentArea');
+            const rect = contentArea.getBoundingClientRect();
+
+            dragCurrentX = event.clientX - rect.left + contentArea.scrollLeft;
+            dragCurrentY = event.clientY - rect.top + contentArea.scrollTop;
+
+            // Update selection rectangle
+            updateSelectionRectangle(pane);
+
+            // Check which items intersect with selection rectangle
+            updateItemSelection(pane, event);
+        }
+
+        // End drag selection
+        function endDragSelection(event, pane) {
+            if (!isDragSelecting || dragPane !== pane) {
+                return;
+            }
+
+            // Final selection update to ensure all intersecting items are selected
+            updateItemSelection(pane, window.dragEvent);
+
+            isDragSelecting = false;
+            dragPane = null;
+            window.dragEvent = null;
+
+            // Hide selection rectangle
+            const selectionRect = document.getElementById(pane + 'SelectionRect');
+            selectionRect.style.display = 'none';
+        }
+
+        // Update selection rectangle visual
+        function updateSelectionRectangle(pane) {
+            const selectionRect = document.getElementById(pane + 'SelectionRect');
+
+            const left = Math.min(dragStartX, dragCurrentX);
+            const top = Math.min(dragStartY, dragCurrentY);
+            const width = Math.abs(dragCurrentX - dragStartX);
+            const height = Math.abs(dragCurrentY - dragStartY);
+
+            selectionRect.style.left = left + 'px';
+            selectionRect.style.top = top + 'px';
+            selectionRect.style.width = width + 'px';
+            selectionRect.style.height = height + 'px';
+            selectionRect.style.display = 'block';
+        }
+
+        // Update item selection based on rectangle intersection
+        function updateItemSelection(pane, event) {
+            const contentArea = document.getElementById(pane + 'ContentArea');
+            const items = contentArea.querySelectorAll('.selectable-item');
+
+            const selectionLeft = Math.min(dragStartX, dragCurrentX);
+            const selectionTop = Math.min(dragStartY, dragCurrentY);
+            const selectionRight = Math.max(dragStartX, dragCurrentX);
+            const selectionBottom = Math.max(dragStartY, dragCurrentY);
+
+            // Track items that should be selected by drag
+            const itemsInSelection = new Set();
+
+            items.forEach(item => {
+                const itemRect = item.getBoundingClientRect();
+                const contentRect = contentArea.getBoundingClientRect();
+
+                const itemLeft = itemRect.left - contentRect.left + contentArea.scrollLeft;
+                const itemTop = itemRect.top - contentRect.top + contentArea.scrollTop;
+                const itemRight = itemLeft + itemRect.width;
+                const itemBottom = itemTop + itemRect.height;
+
+                // Check if item intersects with selection rectangle
+                const intersects = !(itemRight < selectionLeft ||
+                                   itemLeft > selectionRight ||
+                                   itemBottom < selectionTop ||
+                                   itemTop > selectionBottom);
+
+                const itemName = item.dataset.itemName;
+
+                if (intersects) {
+                    itemsInSelection.add(itemName);
+                }
+            });
+
+            // Update selection based on whether Ctrl is held
+            const selectedItems = pane === 'left' ? leftSelectedItems : rightSelectedItems;
+
+            if (event && (event.ctrlKey || event.metaKey)) {
+                // Additive selection - only add new items
+                itemsInSelection.forEach(itemName => {
+                    if (!selectedItems.has(itemName)) {
+                        selectedItems.add(itemName);
+                        addItemSelection(pane, itemName);
+                    }
+                });
+            } else {
+                // Replace selection - clear all and select only intersecting items
+                clearAllSelections(pane);
+                itemsInSelection.forEach(itemName => {
+                    selectedItems.add(itemName);
+                    addItemSelection(pane, itemName);
+                });
+            }
+        }
+
+        // Add click handler to clear selection when clicking empty area
+        function handleContentAreaClick(event, pane) {
+            // Only clear selection if clicking on empty area (not on an item)
+            if (!event.target.closest('.selectable-item') && !isDragSelecting) {
+                if (!event.ctrlKey && !event.metaKey) {
+                    clearAllSelections(pane);
+                }
+            }
+        }
+
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

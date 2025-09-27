@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Argus - 文件夹管理（Win11风格原型）</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+  <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+  <script>tailwind.config={theme:{extend:{colors:{brand:'#3B82F6'}}}}</script>
+  <style>
+    :root { --tile: 220px }
+    .tile { width: var(--tile) }
+    .tile-h { width: var(--tile); height: calc(var(--tile)*.75) }
+    .pane-active { outline: 2px solid rgba(59,130,246,.6); outline-offset:-2px }
+    .no-select { user-select:none }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 no-select">
+  <!-- 第一行：命令栏 -->
+  <div class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
+    <div class="mx-auto max-w-[1400px] px-3 py-2 flex items-center gap-2">
+      <div class="flex items-center gap-1">
+        <button id="cmdNew" class="px-2 py-1 rounded hover:bg-slate-100" title="新建文件夹"><ion-icon name="folder-open-outline"></ion-icon></button>
+        <div class="w-px h-5 bg-slate-200 mx-1"></div>
+        <button id="cmdCut" class="px-2 py-1 rounded hover:bg-slate-100" title="剪切"><ion-icon name="cut-outline"></ion-icon></button>
+        <button id="cmdCopy" class="px-2 py-1 rounded hover:bg-slate-100" title="复制"><ion-icon name="copy-outline"></ion-icon></button>
+        <button id="cmdPaste" class="px-2 py-1 rounded hover:bg-slate-100" title="粘贴"><ion-icon name="clipboard-outline"></ion-icon></button>
+        <button id="cmdRename" class="px-2 py-1 rounded hover:bg-slate-100" title="重命名"><ion-icon name="create-outline"></ion-icon></button>
+        <button id="cmdDel" class="px-2 py-1 rounded hover:bg-slate-100 text-red-600" title="删除"><ion-icon name="trash-outline"></ion-icon></button>
+        <div class="w-px h-5 bg-slate-200 mx-1"></div>
+        <button id="cmdAlbum" class="px-2 py-1 rounded hover:bg-slate-100" title="加入相册"><ion-icon name="albums-outline"></ion-icon></button>
+        <button id="cmdTags" class="px-2 py-1 rounded hover:bg-slate-100" title="编辑标签"><ion-icon name="pricetag-outline"></ion-icon></button>
+      </div>
+      <div class="flex items-center gap-2 mx-auto">
+        <div class="flex items-center gap-1 bg-slate-100 rounded-full px-1 py-0.5">
+          <button id="viewTiles" class="px-3 py-1 rounded-full text-sm bg-white shadow">平铺</button>
+          <button id="viewList" class="px-3 py-1 rounded-full text-sm">列表</button>
+        </div>
+        <div class="flex items-center gap-1 bg-slate-100 rounded-full px-1 py-0.5" title="缩略图大小">
+          <button class="sizeBtn px-2 py-1 rounded-full text-sm" data-size="160">小</button>
+          <button class="sizeBtn px-2 py-1 rounded-full text-sm bg-white shadow" data-size="220">中</button>
+          <button class="sizeBtn px-2 py-1 rounded-full text-sm" data-size="280">大</button>
+          <button class="sizeBtn px-2 py-1 rounded-full text-sm" data-size="340">超大</button>
+        </div>
+        <div class="flex items-center gap-1 bg-slate-100 rounded-full px-1 py-0.5" title="布局">
+          <button id="laySingle" class="px-3 py-1 rounded-full text-sm bg-white shadow">单栏</button>
+          <button id="layH" class="px-3 py-1 rounded-full text-sm">左右</button>
+          <button id="layV" class="px-3 py-1 rounded-full text-sm">上下</button>
+        </div>
+        <label class="inline-flex items-center gap-1 text-sm text-slate-700"><input id="togglePreview" type="checkbox" class="accent-[--brand]">预览窗格</label>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="relative">
+          <ion-icon name="search-outline" class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"></ion-icon>
+          <input id="search" placeholder="搜索（活动面板）" class="pl-8 pr-2 py-1 border rounded text-sm border-slate-200 focus:border-brand focus:outline-none w-64"/>
+        </div>
+        <button id="btnTheme" class="p-2 rounded hover:bg-slate-100" title="主题"><ion-icon name="moon-outline"></ion-icon></button>
+      </div>
+    </div>
+    <div class="mx-auto max-w-[1400px] px-3 pb-2 flex items-center gap-2 text-sm text-slate-600">
+      <button id="navBack" class="p-1.5 rounded hover:bg-slate-100" title="后退"><ion-icon name="chevron-back-outline"></ion-icon></button>
+      <button id="navForward" class="p-1.5 rounded hover:bg-slate-100" title="前进"><ion-icon name="chevron-forward-outline"></ion-icon></button>
+      <button id="navUp" class="p-1.5 rounded hover:bg-slate-100" title="上一级"><ion-icon name="arrow-up-outline"></ion-icon></button>
+      <div id="breadcrumb" class="flex items-center gap-1 overflow-hidden"></div>
+      <div class="ml-auto text-slate-500" id="stats">—</div>
+    </div>
+  </div>
+
+  <!-- 布局容器 -->
+  <main class="mx-auto max-w-[1400px] px-3 py-3">
+    <div id="layout" class="grid gap-3" style="grid-template-columns: 1fr"></div>
+  </main>
+
+  <!-- 预览大图 -->
+  <div id="previewModal" class="fixed inset-0 bg-black/70 items-center justify-center hidden">
+    <div class="absolute inset-0" id="previewBg"></div>
+    <div class="relative max-w-[90vw] max-h-[90vh]">
+      <img id="pvImg" class="max-w-[90vw] max-h-[90vh] object-contain hidden"/>
+      <video id="pvVideo" class="max-w-[90vw] max-h-[90vh] hidden" controls></video>
+      <button id="pvClose" class="absolute top-2 right-2 p-2 rounded-full bg-white"><ion-icon name="close-outline"></ion-icon></button>
+    </div>
+  </div>
+
+  <script>
+  // 数据（演示）
+  const img=(s,w=1000,h=750)=>`https://picsum.photos/seed/${encodeURIComponent(s)}/${w}/${h}`
+  let gid=1; const uid=()=> (gid++).toString()
+  const f=(name,ch=[])=>({id:uid(),type:'folder',name,children:ch})
+  const im=name=>({id:uid(),type:'image',name,src:img(name),poster:img(name,400,300),w:1000,h:750,date:new Date()})
+  const vi=name=>({id:uid(),type:'video',name,poster:img(name,960,540),date:new Date()})
+  const ot=(name,ext,color)=>({id:uid(),type:'other',name,ext,color,date:new Date()})
+  const root=f('首页',[f('旅拍',[f('东京',[im('tokyo-1'),im('tokyo-2'),vi('tokyo-v')]),f('北海道',[im('hok-1'),im('hok-2')]),im('street-1')]),f('RAW',[ot('readme','txt','#64748B'),im('raw-1')]),im('cover-1'),vi('reel-1'),ot('安装包','exe','#94A3B8')])
+
+  // Pane 状态
+  const mk=()=>({current:root,history:[root],hi:0,selection:new Set(),view:'tiles',keyword:''})
+  const panes=[mk(),mk()]; let active=0; let mode='single'; let preview=false
+
+  const qs=s=>document.querySelector(s)
+  const layout=()=>qs('#layout')
+  function setTile(v){ document.documentElement.style.setProperty('--tile', v+'px') }
+
+  // FS 工具
+  function visit(n,fn){ fn(n); if(n.children) n.children.forEach(c=>visit(c,fn)) }
+  function findById(id){ let r=null; visit(root,x=>{if(x.id===id) r=x}); return r }
+  function parentOf(id){ let p=null; (function rec(n){ if(!n.children) return; for(const c of n.children){ if(c.id===id){ p=n; return } rec(c) } })(root); return p }
+  function removeNode(id){ const p=parentOf(id); if(p) p.children=p.children.filter(c=>c.id!==id) }
+  function cloneNode(n){ if(n.type==='folder') return {id:uid(),type:'folder',name:n.name+' - 副本',children:(n.children||[]).map(cloneNode)}; return {...n,id:uid(),name:n.name+' - 副本'} }
+  let clip=null // {op:'cut'|'copy',ids:[]}
+
+  // 过滤与统计
+  function items(p){ let a=(p.current.children||[]); if(p.keyword) a=a.filter(i=>i.name.toLowerCase().includes(p.keyword)); return a }
+  function stat(p){ const l=items(p), s={all:l.length,folder:0,image:0,video:0,other:0}; l.forEach(i=>s[i.type]++); return `共 ${s.all} 项 · 文件夹 ${s.folder} · 照片 ${s.image} · 视频 ${s.video}` }
+
+  // 面包屑
+  function pathTo(node){ const path=[]; let ok=false; (function dfs(n){ path.push(n); if(n===node){ ok=true; return } if(n.children) for(const c of n.children){ if(dfs(c)) return } path.pop() })(root); return ok? path:[root] }
+  function renderCrumb(){ const p=panes[active], bc=qs('#breadcrumb'); bc.innerHTML=''; pathTo(p.current).forEach((n,i,arr)=>{ const b=document.createElement('button'); b.className='px-2 py-1 rounded hover:bg-slate-100 truncate max-w-[240px]'; b.textContent=n.name; b.title=n.name; b.onclick=()=>{ if(i===arr.length-1) return; navTo(active,n) }; bc.appendChild(b); if(i<arr.length-1){ const s=document.createElement('span'); s.textContent='/'; s.className='text-slate-400'; bc.appendChild(s) } }) }
+
+  // 视图：平铺
+  function tile(p, item, idx){ const sel=p.selection.has(item.id); const c=document.createElement('div'); c.className='tile border rounded-lg bg-white hover:shadow transition overflow-hidden '+(sel?'ring-2 ring-brand border-brand':'border-slate-200'); c.dataset.id=item.id; c.dataset.idx=idx; c.dataset.type=item.type; const box=document.createElement('div'); box.className='tile-h bg-slate-100 relative'; c.appendChild(box); if(item.type==='folder'){ const cover=(item.children||[]).find(x=>x.type==='image'||x.type==='video'); if(cover){ const i=document.createElement('img'); i.src=cover.poster||cover.src; i.className='w-full h-full object-cover'; box.appendChild(i) } const b=document.createElement('div'); b.className='absolute left-2 top-2 px-2 py-0.5 text-xs rounded bg-black/40 text-white'; b.textContent='文件夹'; box.appendChild(b) } else if(item.type==='image'){ const i=document.createElement('img'); i.src=item.poster||item.src; i.className='w-full h-full object-cover'; box.appendChild(i); const m=document.createElement('div'); m.className='absolute left-2 top-2 px-2 py-0.5 text-xs rounded bg-black/40 text-white'; m.textContent=`${item.w}×${item.h}`; box.appendChild(m) } else if(item.type==='video'){ const i=document.createElement('img'); i.src=item.poster; i.className='w-full h-full object-cover'; box.appendChild(i); const pbtn=document.createElement('div'); pbtn.className='absolute inset-0 flex items-center justify-center'; pbtn.innerHTML='<div class="w-10 h-10 rounded-full bg-black/50 flex items-center justify-center text-white"><ion-icon name="play-outline"></ion-icon></div>'; box.appendChild(pbtn) } else { box.style.background=item.color||'#CBD5E1' } const row=document.createElement('div'); row.className='px-2 py-1 text-sm flex items-center gap-2'; row.innerHTML=`<ion-icon name="${item.type==='folder'?'folder-outline':item.type==='image'?'image-outline':item.type==='video'?'videocam-outline':'document-outline'}" class="text-slate-500"></ion-icon><span class="truncate" title="${item.name}">${item.name}</span>`; c.appendChild(row); return c }
+  // 视图：列表
+  function listRow(p,item,idx){ const sel=p.selection.has(item.id); const r=document.createElement('div'); r.className='grid grid-cols-12 items-center px-3 py-2 border-b '+(sel?'bg-blue-50 border-brand/40':'hover:bg-slate-50'); r.dataset.id=item.id; r.dataset.idx=idx; r.dataset.type=item.type; const n=document.createElement('div'); n.className='col-span-6 flex items-center gap-2'; n.innerHTML=`<ion-icon name="${item.type==='folder'?'folder-outline':item.type==='image'?'image-outline':item.type==='video'?'videocam-outline':'document-outline'}" class="text-slate-500"></ion-icon><span class="truncate" title="${item.name}">${item.name}</span>`; const t=document.createElement('div'); t.className='col-span-2 text-slate-500 text-sm'; t.textContent=item.type; const s=document.createElement('div'); s.className='col-span-2 text-slate-500 text-sm'; s.textContent=item.type==='image'? `${item.w}×${item.h}`:'--'; const d=document.createElement('div'); d.className='col-span-2 text-slate-500 text-sm text-right'; d.textContent=(item.date||new Date()).toLocaleDateString(); r.append(n,t,s,d); return r }
+  function renderPane(p, mount){ const wrap=document.createElement('div'); wrap.className='border border-slate-200 rounded-xl bg-white overflow-hidden'; wrap.onclick=()=>{ active=(mount.id==='paneB')?1:0; renderAll() }; if(p.view==='tiles'){ const cont=document.createElement('div'); cont.className='p-3 grid gap-3'; cont.style.gridTemplateColumns='repeat(auto-fill, minmax(var(--tile), 1fr))'; items(p).forEach((it,i)=> cont.appendChild(tile(p,it,i))); wrap.appendChild(cont); mount.replaceChildren(wrap); cont.addEventListener('click', e=>onClick(e,p)); cont.addEventListener('dblclick', e=>onDbl(e,p)) } else { const head=document.createElement('div'); head.className='grid grid-cols-12 px-3 py-2 text-xs text-slate-500 border-b bg-slate-50'; head.innerHTML='<div class="col-span-6">名称</div><div class="col-span-2">类型</div><div class="col-span-2">尺寸/大小</div><div class="col-span-2 text-right">日期</div>'; const cont=document.createElement('div'); cont.className='divide-y'; items(p).forEach((it,i)=> cont.appendChild(listRow(p,it,i))); wrap.append(head,cont); mount.replaceChildren(wrap); cont.addEventListener('click', e=>onClick(e,p)); cont.addEventListener('dblclick', e=>onDbl(e,p)) } if((mount.id==='paneA'&&active===0)||(mount.id==='paneB'&&active===1)) wrap.classList.add('pane-active') }
+
+  function onClick(e,p){ const el=e.target.closest('[data-id]'); if(!el) return; const id=el.dataset.id; const idx=parseInt(el.dataset.idx); const it=items(p)[idx]; if(e.ctrlKey||e.metaKey){ p.selection.has(id)? p.selection.delete(id): p.selection.add(id) } else { p.selection.clear(); p.selection.add(id) } renderAll() }
+  function onDbl(e,p){ const el=e.target.closest('[data-id]'); if(!el) return; const it=findById(el.dataset.id); if(!it) return; if(it.type==='folder') enter(p,it); else openPreview(it) }
+
+  // 导航
+  function enter(p,node){ p.current=node; p.history=p.history.slice(0,p.hi+1); p.history.push(p.current); p.hi++; p.selection.clear(); renderAll() }
+  function back(){ const p=panes[active]; if(p.hi>0){ p.hi--; p.current=p.history[p.hi]; p.selection.clear(); renderAll() } }
+  function forward(){ const p=panes[active]; if(p.hi<p.history.length-1){ p.hi++; p.current=p.history[p.hi]; p.selection.clear(); renderAll() } }
+  function up(){ const p=panes[active]; if(p.current!==root){ p.current=root; p.history=[root]; p.hi=0; p.selection.clear(); renderAll() } }
+  function navTo(i,node){ const p=panes[i]; p.current=node; p.history=[root,node]; p.hi=1; p.selection.clear(); renderAll() }
+
+  // 预览窗格与大预览
+  function selectedOne(){ const p=panes[active]; const id=[...p.selection][0]; return id? findById(id):null }
+  function renderPreview(mount){ const it=selectedOne(); const box=document.createElement('div'); box.className='border border-slate-200 rounded-xl bg-white p-3'; if(!it){ box.innerHTML='<div class="text-slate-500 text-sm">未选择项目</div>' } else { box.innerHTML = it.type==='image'? `<img src="${it.poster||it.src}" class="w-full rounded mb-3"/><div class="text-sm">${it.name}</div><div class="text-xs text-slate-500">${it.w}×${it.h}</div>` : it.type==='video'? `<img src="${it.poster}" class="w-full rounded mb-3"/><div class="text-sm">${it.name}</div><div class="text-xs text-slate-500">视频</div>` : it.type==='folder'? `<div class="text-sm">文件夹 · ${it.name}</div>` : `<div class='w-full h-40 rounded' style='background:${it.color||'#CBD5E1'}'></div><div class='text-sm mt-2'>${it.name}</div>` } mount.replaceChildren(box) }
+  function openPreview(it){ const m=qs('#previewModal'),i=qs('#pvImg'),v=qs('#pvVideo'); if(it.type==='image'){ v.pause(); v.classList.add('hidden'); i.src=it.src; i.classList.remove('hidden') } else if(it.type==='video'){ i.classList.add('hidden'); v.poster=it.poster; v.classList.remove('hidden') } m.classList.remove('hidden'); m.classList.add('flex') }
+  function closePreview(){ const m=qs('#previewModal'),v=qs('#pvVideo'); v.pause(); m.classList.add('hidden'); m.classList.remove('flex') }
+
+  // 命令栏
+  function sel(){ return [...panes[active].selection].map(id=>findById(id)).filter(Boolean) }
+  qs('#cmdNew').onclick = ()=>{ const p=panes[active]; const n='新建文件夹 '+((p.current.children||[]).filter(x=>x.type==='folder').length+1); p.current.children.push(f(n,[])); renderAll() }
+  qs('#cmdCut').onclick = ()=>{ const a=sel(); if(!a.length) return alert('请选择项目'); clip={op:'cut', ids:a.map(x=>x.id)} }
+  qs('#cmdCopy').onclick = ()=>{ const a=sel(); if(!a.length) return alert('请选择项目'); clip={op:'copy', ids:a.map(x=>x.id)} }
+  qs('#cmdPaste').onclick = ()=>{ if(!clip) return; const p=panes[active]; if(clip.op==='cut'){ clip.ids.forEach(id=>{ const n=findById(id); if(n){ removeNode(id); p.current.children.push(n) } }); clip=null } else { clip.ids.forEach(id=>{ const n=findById(id); if(n) p.current.children.push(cloneNode(n)) }) } renderAll() }
+  qs('#cmdRename').onclick = ()=>{ const p=panes[active]; const id=[...p.selection][0]; if(!id) return alert('请选择 1 项'); const n=findById(id); const name=prompt('重命名为：', n.name); if(name){ n.name=name; renderAll() } }
+  qs('#cmdDel').onclick = ()=>{ const p=panes[active]; if(!p.selection.size) return; if(!confirm('确定删除所选项目（演示）？')) return; [...p.selection].forEach(id=>removeNode(id)); p.selection.clear(); renderAll() }
+  qs('#cmdAlbum').onclick = ()=> alert('已加入相册（演示）')
+  qs('#cmdTags').onclick = ()=> alert('标签已更新（演示）')
+
+  // 视图/布局/预览/搜索
+  qs('#viewTiles').onclick=()=>{ panes[active].view='tiles'; qs('#viewTiles').classList.add('bg-white','shadow'); qs('#viewList').classList.remove('bg-white','shadow'); renderAll() }
+  qs('#viewList').onclick=()=>{ panes[active].view='list'; qs('#viewList').classList.add('bg-white','shadow'); qs('#viewTiles').classList.remove('bg-white','shadow'); renderAll() }
+  document.querySelectorAll('.sizeBtn').forEach(b=> b.onclick=()=>{ document.querySelectorAll('.sizeBtn').forEach(x=>x.classList.remove('bg-white','shadow')); b.classList.add('bg-white','shadow'); setTile(parseInt(b.dataset.size)); renderAll() })
+  qs('#laySingle').onclick=()=>{ mode='single'; setLay('laySingle') }
+  qs('#layH').onclick=()=>{ mode='two-h'; setLay('layH') }
+  qs('#layV').onclick=()=>{ mode='two-v'; setLay('layV') }
+  function setLay(id){ ['laySingle','layH','layV'].forEach(k=>qs('#'+k).classList.remove('bg-white','shadow')); qs('#'+id).classList.add('bg-white','shadow'); renderAll() }
+  qs('#togglePreview').onchange=e=>{ preview=e.target.checked; renderAll() }
+  qs('#search').oninput=e=>{ panes[active].keyword=(e.target.value||'').toLowerCase().trim(); renderAll() }
+
+  // 导航按钮与快捷键
+  qs('#navBack').onclick=()=>back(); qs('#navForward').onclick=()=>forward(); qs('#navUp').onclick=()=>up()
+  document.addEventListener('keydown', e=>{ const p=panes[active]; if(e.key==='Backspace' && !e.target.matches('input,textarea')){ e.preventDefault(); up() } if(e.altKey&&e.key==='ArrowLeft'){ e.preventDefault(); back() } if(e.altKey&&e.key==='ArrowRight'){ e.preventDefault(); forward() } if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='a'){ e.preventDefault(); items(p).forEach(i=>p.selection.add(i.id)); renderAll() } if(e.key==='Delete'){ e.preventDefault(); qs('#cmdDel').click() } })
+
+  // 预览大图
+  qs('#pvClose').onclick=()=>closePreview(); qs('#previewBg').onclick=()=>closePreview()
+
+  // 主题
+  function theme(m){ document.documentElement.classList.toggle('dark', m==='dark'); document.body.className = m==='dark' ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'; localStorage.setItem('argus-theme', m) }
+  const saved = localStorage.getItem('argus-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'); theme(saved)
+  qs('#btnTheme').onclick=()=> theme(document.documentElement.classList.contains('dark')? 'light':'dark')
+
+  // 渲染入口
+  function renderAll(){ qs('#stats').textContent=stat(panes[active]); renderCrumb(); const lay=layout(); lay.innerHTML=''; let cols='1fr'; if(mode==='two-h') cols = preview? '1fr 1fr 320px' : '1fr 1fr'; if(mode==='single') cols = preview? '1fr 320px' : '1fr'; if(mode==='two-v') cols = preview? '1fr 320px' : '1fr'; lay.style.gridTemplateColumns=cols; if(mode==='single'||mode==='two-h'){ const a=document.createElement('div'); a.id='paneA'; renderPane(panes[0],a); lay.appendChild(a); if(mode==='two-h'){ const b=document.createElement('div'); b.id='paneB'; renderPane(panes[1],b); lay.appendChild(b) } if(preview){ const pv=document.createElement('aside'); pv.id='pv'; renderPreview(pv); lay.appendChild(pv) } } else { lay.style.gridTemplateColumns = preview? '1fr 320px':'1fr'; const col=document.createElement('div'); col.className='grid gap-3'; col.style.gridTemplateRows='1fr 1fr'; const a=document.createElement('div'); a.id='paneA'; renderPane(panes[0],a); const b=document.createElement('div'); b.id='paneB'; renderPane(panes[1],b); col.appendChild(a); col.appendChild(b); lay.appendChild(col); if(preview){ const pv=document.createElement('aside'); pv.id='pv'; renderPreview(pv); lay.appendChild(pv) } } const p=panes[active]; qs('#navBack').disabled=p.hi===0; qs('#navForward').disabled=p.hi>=p.history.length-1; qs('#navUp').disabled=p.current===root }
+
+  setTile(220); renderAll()
+  </script>
+</body>
+<style>
+  .dark .bg-white{ background:#0f172a }
+  .dark .bg-slate-50{ background:#0b1220 }
+  .dark .text-slate-900{ color:#E2E8F0 }
+  .dark .border-slate-200{ border-color:#253048 }
+  .dark .hover\:bg-slate-100:hover{ background:#172036 }
+  .accent-\[--brand\]{ accent-color:#3B82F6 }
+</style>
+</html>

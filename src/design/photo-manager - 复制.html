@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Argus - 照片管理器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+  <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: '#3B82F6',
+            accent: '#10B981'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --tile-size: 200px;
+      --tile-gap: 12px;
+    }
+    .photo-tile {
+      width: var(--tile-size);
+      height: var(--tile-size);
+    }
+    .folder-tile {
+      width: var(--tile-size);
+      height: calc(var(--tile-size) * 0.8);
+    }
+    .no-select { user-select: none; }
+    .duplicate-indicator {
+      animation: pulse 2s infinite;
+    }
+    .grid-auto {
+      grid-template-columns: repeat(auto-fill, minmax(var(--tile-size), 1fr));
+      gap: var(--tile-gap);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 no-select">
+
+  <!-- 顶部工具栏 -->
+  <header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200">
+    <div class="px-4 py-3">
+      <!-- 第一行：主要操作区 -->
+      <div class="flex items-center justify-between mb-3">
+        <!-- 左侧：应用标识和导航 -->
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand to-purple-600 text-white flex items-center justify-center font-bold">A</div>
+            <h1 class="text-lg font-semibold">Argus</h1>
+          </div>
+          <div class="h-6 w-px bg-slate-300"></div>
+          <div class="flex items-center gap-1">
+            <button id="btnBack" class="p-2 rounded-lg hover:bg-slate-100 disabled:opacity-50" title="后退">
+              <ion-icon name="chevron-back-outline"></ion-icon>
+            </button>
+            <button id="btnForward" class="p-2 rounded-lg hover:bg-slate-100 disabled:opacity-50" title="前进">
+              <ion-icon name="chevron-forward-outline"></ion-icon>
+            </button>
+            <button id="btnUp" class="p-2 rounded-lg hover:bg-slate-100 disabled:opacity-50" title="上一级">
+              <ion-icon name="arrow-up-outline"></ion-icon>
+            </button>
+          </div>
+        </div>
+
+        <!-- 右侧：搜索和设置 -->
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <ion-icon name="search-outline" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></ion-icon>
+            <input id="searchInput" placeholder="搜索照片、视频..."
+                   class="pl-10 pr-4 py-2 w-80 border border-slate-200 rounded-lg focus:border-brand focus:outline-none text-sm"/>
+          </div>
+          <button id="btnDuplicates" class="px-3 py-2 rounded-lg bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 text-sm" title="查看重复项">
+            <ion-icon name="copy-outline" class="mr-1"></ion-icon>重复项 <span id="duplicateCount" class="ml-1 px-1.5 py-0.5 bg-orange-200 rounded text-xs">0</span>
+          </button>
+          <button id="btnSettings" class="p-2 rounded-lg hover:bg-slate-100" title="设置">
+            <ion-icon name="settings-outline"></ion-icon>
+          </button>
+          <button id="btnTheme" class="p-2 rounded-lg hover:bg-slate-100" title="切换主题">
+            <ion-icon name="moon-outline"></ion-icon>
+          </button>
+        </div>
+      </div>
+
+      <!-- 第二行：照片管理工具栏 -->
+      <div class="flex items-center justify-between">
+        <!-- 左侧：照片操作 -->
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1 bg-slate-100 rounded-lg px-1 py-0.5">
+            <button id="btnImport" class="px-3 py-1.5 rounded-md text-sm bg-brand text-white">
+              <ion-icon name="cloud-upload-outline" class="mr-1"></ion-icon>导入照片
+            </button>
+            <button id="btnScan" class="px-3 py-1.5 rounded-md text-sm hover:bg-slate-200">
+              <ion-icon name="scan-outline" class="mr-1"></ion-icon>扫描文件夹
+            </button>
+          </div>
+
+          <div class="h-6 w-px bg-slate-300 mx-2"></div>
+
+          <!-- 选中项操作 -->
+          <div id="selectionTools" class="flex items-center gap-1 opacity-50">
+            <span id="selectionCount" class="text-sm text-slate-600 mr-2">未选择</span>
+            <button id="btnAlbum" class="px-2 py-1.5 rounded-md text-sm hover:bg-accent/10 text-accent" disabled>
+              <ion-icon name="albums-outline" class="mr-1"></ion-icon>加入相册
+            </button>
+            <button id="btnTags" class="px-2 py-1.5 rounded-md text-sm hover:bg-slate-100" disabled>
+              <ion-icon name="pricetag-outline" class="mr-1"></ion-icon>编辑标签
+            </button>
+            <button id="btnBatchEdit" class="px-2 py-1.5 rounded-md text-sm hover:bg-slate-100" disabled>
+              <ion-icon name="create-outline" class="mr-1"></ion-icon>批量编辑
+            </button>
+            <button id="btnMove" class="px-2 py-1.5 rounded-md text-sm hover:bg-slate-100" disabled>
+              <ion-icon name="folder-outline" class="mr-1"></ion-icon>移动到...
+            </button>
+            <button id="btnDelete" class="px-2 py-1.5 rounded-md text-sm hover:bg-red-50 text-red-600" disabled>
+              <ion-icon name="trash-outline" class="mr-1"></ion-icon>删除
+            </button>
+          </div>
+        </div>
+
+        <!-- 右侧：视图控制 -->
+        <div class="flex items-center gap-3">
+          <!-- 显示过滤 -->
+          <div class="flex items-center gap-2 text-sm">
+            <label class="flex items-center gap-1">
+              <input id="showPhotos" type="checkbox" checked class="accent-brand">
+              <span>照片</span>
+            </label>
+            <label class="flex items-center gap-1">
+              <input id="showVideos" type="checkbox" checked class="accent-brand">
+              <span>视频</span>
+            </label>
+            <label class="flex items-center gap-1">
+              <input id="showFolders" type="checkbox" checked class="accent-brand">
+              <span>文件夹</span>
+            </label>
+            <label class="flex items-center gap-1">
+              <input id="showOthers" type="checkbox" class="accent-brand">
+              <span>其他文件</span>
+            </label>
+          </div>
+
+          <div class="h-6 w-px bg-slate-300"></div>
+
+          <!-- 缩略图大小 -->
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-slate-600">大小</span>
+            <input id="tileSize" type="range" min="150" max="300" value="200" class="w-20 accent-brand">
+          </div>
+
+          <!-- 排序方式 -->
+          <select id="sortBy" class="px-2 py-1 border border-slate-200 rounded text-sm focus:border-brand focus:outline-none">
+            <option value="name">按名称</option>
+            <option value="date">按日期</option>
+            <option value="size">按大小</option>
+            <option value="type">按类型</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 路径导航 -->
+  <nav class="bg-white border-b border-slate-100 px-4 py-2">
+    <div id="breadcrumb" class="flex items-center gap-1 text-sm text-slate-600">
+      <!-- 动态生成面包屑 -->
+    </div>
+  </nav>
+
+  <!-- 主内容区 -->
+  <main class="p-4">
+    <!-- 统计信息 -->
+    <div id="statsBar" class="mb-4 flex items-center justify-between text-sm text-slate-600">
+      <div class="flex items-center gap-4">
+        <span id="totalItems">共 0 项</span>
+        <span id="photoCount">照片 0</span>
+        <span id="videoCount">视频 0</span>
+        <span id="folderCount">文件夹 0</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <span id="lastScan">上次扫描: 从未</span>
+        <button id="btnQuickScan" class="text-brand hover:underline">快速扫描</button>
+      </div>
+    </div>
+
+    <!-- 内容网格 -->
+    <div id="contentGrid" class="grid grid-auto">
+      <!-- 动态生成内容 -->
+    </div>
+
+    <!-- 空状态 -->
+    <div id="emptyState" class="hidden text-center py-20">
+      <div class="text-slate-400 mb-4">
+        <ion-icon name="image-outline" style="font-size: 4rem;"></ion-icon>
+      </div>
+      <h3 class="text-lg font-medium text-slate-600 mb-2">这里还没有照片</h3>
+      <p class="text-slate-500 mb-4">导入一些照片开始使用 Argus</p>
+      <button class="px-4 py-2 bg-brand text-white rounded-lg hover:bg-blue-600">
+        <ion-icon name="cloud-upload-outline" class="mr-2"></ion-icon>导入照片
+      </button>
+    </div>
+  </main>
+
+  <!-- 预览模态框 -->
+  <div id="previewModal" class="fixed inset-0 bg-black/80 flex items-center justify-center hidden z-50">
+    <div class="relative max-w-[90vw] max-h-[90vh]">
+      <img id="previewImage" class="max-w-[90vw] max-h-[90vh] object-contain hidden">
+      <video id="previewVideo" class="max-w-[90vw] max-h-[90vh] hidden" controls></video>
+
+      <!-- 预览控制栏 -->
+      <div class="absolute top-4 right-4 flex items-center gap-2">
+        <button id="btnFullscreen" class="p-2 rounded-lg bg-black/50 text-white hover:bg-black/70">
+          <ion-icon name="expand-outline"></ion-icon>
+        </button>
+        <button id="btnPreviewClose" class="p-2 rounded-lg bg-black/50 text-white hover:bg-black/70">
+          <ion-icon name="close-outline"></ion-icon>
+        </button>
+      </div>
+
+      <!-- 照片信息面板 -->
+      <div id="photoInfo" class="absolute bottom-4 left-4 bg-black/70 text-white rounded-lg p-4 max-w-sm">
+        <h4 id="photoName" class="font-medium mb-2">IMG_001.jpg</h4>
+        <div class="text-sm space-y-1">
+          <div id="photoSize">2048 × 1536</div>
+          <div id="photoDate">2024-01-01 12:00:00</div>
+          <div id="photoFileSize">2.5 MB</div>
+          <div id="cameraInfo" class="hidden">Canon EOS R5 · f/2.8 · 1/125s · ISO 400</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // 模拟数据
+  const img = (name, w=1600, h=1200) => `https://picsum.photos/seed/${encodeURIComponent(name)}/${w}/${h}`;
+  let itemId = 1;
+  const uid = () => (itemId++).toString();
+
+  // 数据结构
+  const createFolder = (name, children = []) => ({
+    id: uid(),
+    type: 'folder',
+    name,
+    children,
+    path: `/photos/${name}`,
+    itemCount: children.length
+  });
+
+  const createPhoto = (name, isDuplicate = false) => ({
+    id: uid(),
+    type: 'image',
+    name,
+    src: img(name),
+    thumbnail: img(name, 400, 400),
+    size: Math.floor(Math.random() * 5000000) + 500000, // 0.5-5MB
+    width: 1600,
+    height: 1200,
+    date: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1),
+    isDuplicate,
+    exif: {
+      camera: 'Canon EOS R5',
+      lens: 'RF 24-70mm f/2.8L',
+      fNumber: 'f/2.8',
+      exposureTime: '1/125s',
+      iso: 'ISO 400'
+    }
+  });
+
+  const createVideo = (name) => ({
+    id: uid(),
+    type: 'video',
+    name,
+    thumbnail: img(name, 400, 400),
+    size: Math.floor(Math.random() * 50000000) + 5000000, // 5-50MB
+    duration: Math.floor(Math.random() * 300) + 30, // 30-330s
+    date: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1)
+  });
+
+  const createOtherFile = (name, ext, color) => ({
+    id: uid(),
+    type: 'other',
+    name,
+    ext,
+    color,
+    size: Math.floor(Math.random() * 1000000) + 10000,
+    date: new Date()
+  });
+
+  // 模拟文件系统数据
+  const rootData = createFolder('我的照片', [
+    createFolder('2024年旅行', [
+      createFolder('东京之旅', [
+        createPhoto('东京塔夜景'),
+        createPhoto('浅草寺'),
+        createPhoto('涩谷路口'),
+        createVideo('东京街头录像'),
+        createPhoto('东京塔夜景'), // 重复项
+      ]),
+      createFolder('大阪美食', [
+        createPhoto('大阪烧'),
+        createPhoto('章鱼小丸子'),
+        createVideo('道顿堀夜景')
+      ]),
+      createPhoto('机场候机'),
+      createVideo('飞行延时摄影')
+    ]),
+    createFolder('工作照片', [
+      createPhoto('会议室'),
+      createPhoto('办公桌'),
+      createOtherFile('项目文档', 'docx', '#4285f4'),
+      createOtherFile('演示文稿', 'pptx', '#ff6d01')
+    ]),
+    createFolder('RAW文件', [
+      createPhoto('专业人像01'),
+      createPhoto('风景大片'),
+      createOtherFile('lightroom预设', 'lrtemplate', '#31c5f0')
+    ]),
+    createPhoto('随手拍001'),
+    createPhoto('随手拍002'),
+    createPhoto('随手拍001', true), // 重复项
+    createVideo('生活记录'),
+    createOtherFile('软件安装包', 'exe', '#666666')
+  ]);
+
+  // 状态管理
+  let currentFolder = rootData;
+  let history = [rootData];
+  let historyIndex = 0;
+  let selectedItems = new Set();
+  let viewOptions = {
+    showPhotos: true,
+    showVideos: true,
+    showFolders: true,
+    showOthers: false
+  };
+
+  // DOM 操作工具
+  const $ = (selector) => document.querySelector(selector);
+  const $$ = (selector) => document.querySelectorAll(selector);
+
+  // 文件大小格式化
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  // 获取当前显示的项目
+  function getVisibleItems() {
+    if (!currentFolder.children) return [];
+    return currentFolder.children.filter(item => {
+      if (item.type === 'image' && !viewOptions.showPhotos) return false;
+      if (item.type === 'video' && !viewOptions.showVideos) return false;
+      if (item.type === 'folder' && !viewOptions.showFolders) return false;
+      if (item.type === 'other' && !viewOptions.showOthers) return false;
+      return true;
+    });
+  }
+
+  // 渲染面包屑
+  function renderBreadcrumb() {
+    const breadcrumb = $('#breadcrumb');
+    breadcrumb.innerHTML = '';
+
+    history.slice(0, historyIndex + 1).forEach((folder, index) => {
+      if (index > 0) {
+        const separator = document.createElement('span');
+        separator.innerHTML = '<ion-icon name="chevron-forward-outline"></ion-icon>';
+        separator.className = 'text-slate-400';
+        breadcrumb.appendChild(separator);
+      }
+
+      const crumb = document.createElement('button');
+      crumb.textContent = folder.name;
+      crumb.className = 'px-2 py-1 rounded hover:bg-slate-100 ' +
+                       (index === historyIndex ? 'text-slate-900 font-medium' : 'text-slate-600');
+
+      if (index < historyIndex) {
+        crumb.onclick = () => navigateToHistory(index);
+      }
+
+      breadcrumb.appendChild(crumb);
+    });
+  }
+
+  // 渲染项目瓦片
+  function renderTile(item) {
+    const tile = document.createElement('div');
+    tile.className = 'relative group cursor-pointer';
+    tile.dataset.id = item.id;
+    tile.dataset.type = item.type;
+
+    if (item.type === 'folder') {
+      tile.className += ' folder-tile';
+      tile.innerHTML = `
+        <div class="folder-tile border-2 border-slate-200 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 hover:from-blue-100 hover:to-indigo-200 transition-all duration-200 flex flex-col">
+          <div class="flex-1 flex items-center justify-center">
+            <ion-icon name="folder" class="text-4xl text-blue-600"></ion-icon>
+          </div>
+          <div class="p-3 border-t bg-white/50">
+            <div class="font-medium text-sm truncate" title="${item.name}">${item.name}</div>
+            <div class="text-xs text-slate-600">${item.itemCount} 项</div>
+          </div>
+        </div>
+      `;
+    } else if (item.type === 'image') {
+      tile.className += ' photo-tile';
+      tile.innerHTML = `
+        <div class="photo-tile border-2 border-slate-200 rounded-xl overflow-hidden bg-white hover:border-brand transition-all duration-200 ${selectedItems.has(item.id) ? 'ring-2 ring-brand border-brand' : ''}">
+          <div class="relative aspect-square">
+            <img src="${item.thumbnail}" alt="${item.name}" class="w-full h-full object-cover">
+            ${item.isDuplicate ? '<div class="absolute top-2 right-2 w-3 h-3 bg-orange-500 rounded-full duplicate-indicator" title="重复项"></div>' : ''}
+            <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200"></div>
+            <!-- 选择框 -->
+            <div class="absolute top-2 left-2 w-5 h-5 border-2 border-white rounded ${selectedItems.has(item.id) ? 'bg-brand border-brand' : 'bg-black/20'} flex items-center justify-center">
+              ${selectedItems.has(item.id) ? '<ion-icon name="checkmark" class="text-white text-xs"></ion-icon>' : ''}
+            </div>
+          </div>
+          <div class="p-2">
+            <div class="text-xs font-medium truncate" title="${item.name}">${item.name}</div>
+          </div>
+        </div>
+      `;
+    } else if (item.type === 'video') {
+      tile.className += ' photo-tile';
+      tile.innerHTML = `
+        <div class="photo-tile border-2 border-slate-200 rounded-xl overflow-hidden bg-white hover:border-brand transition-all duration-200 ${selectedItems.has(item.id) ? 'ring-2 ring-brand border-brand' : ''}">
+          <div class="relative aspect-square">
+            <img src="${item.thumbnail}" alt="${item.name}" class="w-full h-full object-cover">
+            <div class="absolute inset-0 bg-black/20 flex items-center justify-center">
+              <div class="w-12 h-12 bg-black/60 rounded-full flex items-center justify-center">
+                <ion-icon name="play" class="text-white text-xl ml-1"></ion-icon>
+              </div>
+            </div>
+            <div class="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/70 text-white text-xs rounded">
+              ${Math.floor(item.duration / 60)}:${(item.duration % 60).toString().padStart(2, '0')}
+            </div>
+            <!-- 选择框 -->
+            <div class="absolute top-2 left-2 w-5 h-5 border-2 border-white rounded ${selectedItems.has(item.id) ? 'bg-brand border-brand' : 'bg-black/20'} flex items-center justify-center">
+              ${selectedItems.has(item.id) ? '<ion-icon name="checkmark" class="text-white text-xs"></ion-icon>' : ''}
+            </div>
+          </div>
+          <div class="p-2">
+            <div class="text-xs font-medium truncate" title="${item.name}">${item.name}</div>
+          </div>
+        </div>
+      `;
+    } else if (item.type === 'other') {
+      tile.className += ' photo-tile';
+      tile.innerHTML = `
+        <div class="photo-tile border-2 border-slate-200 rounded-xl overflow-hidden bg-white hover:border-slate-300 transition-all duration-200 opacity-60">
+          <div class="relative aspect-square flex items-center justify-center" style="background-color: ${item.color}">
+            <div class="text-white font-bold text-lg">${item.ext.toUpperCase()}</div>
+          </div>
+          <div class="p-2">
+            <div class="text-xs font-medium truncate" title="${item.name}">${item.name}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    return tile;
+  }
+
+  // 渲染内容网格
+  function renderContent() {
+    const items = getVisibleItems();
+    const grid = $('#contentGrid');
+    const emptyState = $('#emptyState');
+
+    if (items.length === 0) {
+      grid.style.display = 'none';
+      emptyState.classList.remove('hidden');
+      return;
+    }
+
+    grid.style.display = 'grid';
+    emptyState.classList.add('hidden');
+    grid.innerHTML = '';
+
+    items.forEach(item => {
+      const tile = renderTile(item);
+      grid.appendChild(tile);
+    });
+
+    updateStats();
+  }
+
+  // 更新统计信息
+  function updateStats() {
+    const items = getVisibleItems();
+    const photos = items.filter(item => item.type === 'image').length;
+    const videos = items.filter(item => item.type === 'video').length;
+    const folders = items.filter(item => item.type === 'folder').length;
+
+    $('#totalItems').textContent = `共 ${items.length} 项`;
+    $('#photoCount').textContent = `照片 ${photos}`;
+    $('#videoCount').textContent = `视频 ${videos}`;
+    $('#folderCount').textContent = `文件夹 ${folders}`;
+
+    // 统计所有重复项
+    const allDuplicates = getAllDuplicates();
+    $('#duplicateCount').textContent = allDuplicates.length;
+
+    updateSelectionTools();
+  }
+
+  // 获取所有重复项
+  function getAllDuplicates() {
+    const duplicates = [];
+    function findDuplicates(folder) {
+      if (!folder.children) return;
+      folder.children.forEach(item => {
+        if (item.isDuplicate) duplicates.push(item);
+        if (item.type === 'folder') findDuplicates(item);
+      });
+    }
+    findDuplicates(rootData);
+    return duplicates;
+  }
+
+  // 更新选择工具栏
+  function updateSelectionTools() {
+    const count = selectedItems.size;
+    const selectionTools = $('#selectionTools');
+    const selectionCount = $('#selectionCount');
+
+    if (count === 0) {
+      selectionCount.textContent = '未选择';
+      selectionTools.className = 'flex items-center gap-1 opacity-50';
+      $$('#selectionTools button').forEach(btn => btn.disabled = true);
+    } else {
+      selectionCount.textContent = `已选择 ${count} 项`;
+      selectionTools.className = 'flex items-center gap-1 opacity-100';
+      $$('#selectionTools button').forEach(btn => btn.disabled = false);
+    }
+  }
+
+  // 导航功能
+  function navigateToFolder(folder) {
+    currentFolder = folder;
+    history = history.slice(0, historyIndex + 1);
+    history.push(folder);
+    historyIndex = history.length - 1;
+    selectedItems.clear();
+    renderBreadcrumb();
+    renderContent();
+    updateNavigationButtons();
+  }
+
+  function navigateToHistory(index) {
+    historyIndex = index;
+    currentFolder = history[index];
+    selectedItems.clear();
+    renderBreadcrumb();
+    renderContent();
+    updateNavigationButtons();
+  }
+
+  function goBack() {
+    if (historyIndex > 0) {
+      historyIndex--;
+      currentFolder = history[historyIndex];
+      selectedItems.clear();
+      renderBreadcrumb();
+      renderContent();
+      updateNavigationButtons();
+    }
+  }
+
+  function goForward() {
+    if (historyIndex < history.length - 1) {
+      historyIndex++;
+      currentFolder = history[historyIndex];
+      selectedItems.clear();
+      renderBreadcrumb();
+      renderContent();
+      updateNavigationButtons();
+    }
+  }
+
+  function goUp() {
+    if (historyIndex > 0) {
+      goBack();
+    }
+  }
+
+  function updateNavigationButtons() {
+    $('#btnBack').disabled = historyIndex === 0;
+    $('#btnForward').disabled = historyIndex === history.length - 1;
+    $('#btnUp').disabled = historyIndex === 0;
+  }
+
+  // 预览功能
+  function showPreview(item) {
+    if (item.type === 'image') {
+      $('#previewImage').src = item.src;
+      $('#previewImage').classList.remove('hidden');
+      $('#previewVideo').classList.add('hidden');
+
+      $('#photoName').textContent = item.name;
+      $('#photoSize').textContent = `${item.width} × ${item.height}`;
+      $('#photoDate').textContent = item.date.toLocaleString();
+      $('#photoFileSize').textContent = formatFileSize(item.size);
+
+      if (item.exif) {
+        $('#cameraInfo').textContent = `${item.exif.camera} · ${item.exif.fNumber} · ${item.exif.exposureTime} · ${item.exif.iso}`;
+        $('#cameraInfo').classList.remove('hidden');
+      } else {
+        $('#cameraInfo').classList.add('hidden');
+      }
+
+      $('#previewModal').classList.remove('hidden');
+    } else if (item.type === 'video') {
+      // 视频预览逻辑
+      $('#previewVideo').poster = item.thumbnail;
+      $('#previewVideo').classList.remove('hidden');
+      $('#previewImage').classList.add('hidden');
+      $('#previewModal').classList.remove('hidden');
+    }
+  }
+
+  function closePreview() {
+    $('#previewModal').classList.add('hidden');
+    $('#previewVideo').pause();
+  }
+
+  // 事件监听
+  document.addEventListener('DOMContentLoaded', function() {
+    // 导航按钮
+    $('#btnBack').onclick = goBack;
+    $('#btnForward').onclick = goForward;
+    $('#btnUp').onclick = goUp;
+
+    // 内容网格点击事件
+    $('#contentGrid').addEventListener('click', function(e) {
+      const tile = e.target.closest('[data-id]');
+      if (!tile) return;
+
+      const itemId = tile.dataset.id;
+      const itemType = tile.dataset.type;
+      const item = currentFolder.children.find(item => item.id === itemId);
+
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl/Cmd + 点击 = 多选
+        if (selectedItems.has(itemId)) {
+          selectedItems.delete(itemId);
+        } else {
+          selectedItems.add(itemId);
+        }
+        renderContent();
+      } else if (e.shiftKey) {
+        // Shift + 点击 = 范围选择
+        // TODO: 实现范围选择逻辑
+      } else {
+        // 普通点击
+        if (itemType === 'folder') {
+          navigateToFolder(item);
+        } else {
+          selectedItems.clear();
+          selectedItems.add(itemId);
+          renderContent();
+        }
+      }
+    });
+
+    // 双击事件
+    $('#contentGrid').addEventListener('dblclick', function(e) {
+      const tile = e.target.closest('[data-id]');
+      if (!tile) return;
+
+      const itemId = tile.dataset.id;
+      const item = currentFolder.children.find(item => item.id === itemId);
+
+      if (item.type === 'image' || item.type === 'video') {
+        showPreview(item);
+      } else if (item.type === 'folder') {
+        navigateToFolder(item);
+      }
+    });
+
+    // 预览关闭
+    $('#btnPreviewClose').onclick = closePreview;
+    $('#previewModal').addEventListener('click', function(e) {
+      if (e.target === this) closePreview();
+    });
+
+    // 视图选项
+    ['showPhotos', 'showVideos', 'showFolders', 'showOthers'].forEach(option => {
+      $(`#${option}`).onchange = function() {
+        viewOptions[option] = this.checked;
+        renderContent();
+      };
+    });
+
+    // 缩略图大小
+    $('#tileSize').oninput = function() {
+      document.documentElement.style.setProperty('--tile-size', this.value + 'px');
+    };
+
+    // 初始化
+    renderBreadcrumb();
+    renderContent();
+    updateNavigationButtons();
+  });
+
+  // 键盘快捷键
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      if (!$('#previewModal').classList.contains('hidden')) {
+        closePreview();
+      } else {
+        selectedItems.clear();
+        renderContent();
+      }
+    } else if (e.key === 'Backspace' && !e.target.matches('input')) {
+      e.preventDefault();
+      goUp();
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !e.target.matches('input')) {
+      e.preventDefault();
+      const items = getVisibleItems();
+      items.forEach(item => selectedItems.add(item.id));
+      renderContent();
+    }
+  });
+  </script>
+</body>
+</html>

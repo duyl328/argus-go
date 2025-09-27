@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Argus - 文件夹预览</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+  <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+  <style>
+    :root { --tile: 200px }
+    .tile { width: var(--tile); }
+    .tile-h { width: var(--tile); height: calc(var(--tile) * .75) }
+    .no-select { user-select: none }
+  </style>
+  <script>
+    tailwind.config = { theme:{ extend:{ colors:{ brand:'#3B82F6' }}}}
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-900 no-select">
+  <!-- 顶部 -->
+  <header class="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-slate-200">
+    <div class="mx-auto max-w-[1200px] px-4 py-2 flex items-center gap-2">
+      <div class="flex items-center gap-2 min-w-[180px]">
+        <div class="w-8 h-8 rounded bg-brand text-white flex items-center justify-center">A</div>
+        <div class="font-semibold">Argus</div>
+        <span class="text-slate-400">/</span>
+        <div class="text-slate-600">文件夹预览</div>
+      </div>
+      <div class="flex items-center gap-1">
+        <button id="btnBack" class="p-2 rounded hover:bg-slate-100" title="后退 Alt+←"><ion-icon name="chevron-back-outline"></ion-icon></button>
+        <button id="btnForward" class="p-2 rounded hover:bg-slate-100" title="前进 Alt+→"><ion-icon name="chevron-forward-outline"></ion-icon></button>
+        <button id="btnUp" class="p-2 rounded hover:bg-slate-100" title="上一级 Backspace"><ion-icon name="arrow-up-outline"></ion-icon></button>
+      </div>
+      <nav id="breadcrumb" class="flex-1 text-sm text-slate-600 px-2"></nav>
+      <div class="relative">
+        <ion-icon name="search-outline" class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"></ion-icon>
+        <input id="search" placeholder="搜索..." class="pl-8 pr-2 py-1 border rounded text-sm border-slate-200 focus:border-brand focus:outline-none"/>
+      </div>
+      <button id="btnTheme" class="p-2 rounded hover:bg-slate-100" title="主题"><ion-icon name="moon-outline"></ion-icon></button>
+    </div>
+  </header>
+
+  <!-- 工具条 -->
+  <section class="bg-white border-b border-slate-200">
+    <div class="mx-auto max-w-[1200px] px-4 py-2 flex items-center gap-3 text-sm">
+      <div class="flex items-center gap-2">
+        <span class="text-slate-600">缩略图</span>
+        <input id="zoom" type="range" min="140" max="320" value="200" class="w-40"/>
+      </div>
+      <label class="inline-flex items-center gap-1"><input id="onlyMedia" type="checkbox" checked class="accent-brand">仅媒体</label>
+      <label class="inline-flex items-center gap-1"><input id="hideOthers" type="checkbox" class="accent-brand">隐藏非媒体</label>
+      <label class="inline-flex items-center gap-1"><input id="dblUp" type="checkbox" checked class="accent-brand">双击空白返回上级</label>
+      <div class="ml-auto text-slate-600" id="stats">—</div>
+    </div>
+  </section>
+
+  <!-- 内容 -->
+  <main class="mx-auto max-w-[1200px] px-4 py-4">
+    <div id="grid" class="grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(var(--tile), 1fr));"></div>
+    <div id="empty" class="hidden text-center text-slate-500 py-24">此处空空如也</div>
+  </main>
+
+  <!-- 底部操作条 -->
+  <div id="bar" class="fixed bottom-3 left-1/2 -translate-x-1/2 w-[96%] max-w-[900px] bg-white border border-slate-200 rounded-xl shadow p-2 hidden">
+    <div class="flex items-center gap-2 text-sm">
+      <div class="text-slate-600"><span id="sel">0</span> 项已选</div>
+      <div class="w-px h-4 bg-slate-200"></div>
+      <button id="actOpen" class="px-3 py-1 rounded bg-brand text-white">打开/预览</button>
+      <button id="actAlbum" class="px-3 py-1 rounded bg-slate-900 text-white">加入相册</button>
+      <button id="actTags" class="px-3 py-1 rounded border">编辑标签</button>
+      <button id="actRename" class="px-3 py-1 rounded border">重命名</button>
+      <button id="actMove" class="px-3 py-1 rounded border">移动到备份</button>
+      <button id="actDelete" class="ml-auto px-3 py-1 rounded border border-red-300 text-red-600">删除</button>
+    </div>
+  </div>
+
+  <!-- 预览 -->
+  <div id="preview" class="fixed inset-0 bg-black/70 items-center justify-center hidden">
+    <div class="absolute inset-0" id="previewBg"></div>
+    <div class="relative max-w-[90vw] max-h-[90vh]">
+      <img id="pvImg" class="max-w-[90vw] max-h-[90vh] object-contain hidden"/>
+      <video id="pvVideo" class="max-w-[90vw] max-h-[90vh] hidden" controls></video>
+      <button id="pvClose" class="absolute top-2 right-2 p-2 rounded-full bg-white"><ion-icon name="close-outline"></ion-icon></button>
+    </div>
+  </div>
+
+  <script>
+  // 数据（演示）
+  const img = (s,w=800,h=600)=>`https://picsum.photos/seed/${encodeURIComponent(s)}/${w}/${h}`
+  let id=1; const uid=()=> (id++).toString()
+  const f = (name,children)=>({id:uid(),type:'folder',name,children})
+  const im= name=>({id:uid(),type:'image',name,src:img(name,1000,750),poster:img(name,400,300),w:1000,h:750})
+  const vi= name=>({id:uid(),type:'video',name,poster:img(name,960,540)})
+  const ot= (name,ext,color)=>({id:uid(),type:'other',name,ext,color})
+
+  const root = f('首页', [
+    f('2024-旅拍', [ f('东京', [im('tokyo-1'), im('tokyo-2'), vi('tokyo-v')]), im('street-1'), vi('city-reel') ]),
+    f('RAW素材', [ ot('说明','txt','#64748B'), im('raw-1'), im('raw-2') ]),
+    f('导出', [ ot('导出记录','xlsx','#22C55E'), im('export-1') ]),
+    im('cover-1'), im('cover-2'), vi('reel-1'), ot('安装包','exe','#94A3B8')
+  ])
+
+  // 状态
+  let current = root
+  let history=[current]; let hi=0
+  let selection = new Set()
+  let onlyMedia = true, hideOthers=false, dblUp=true
+  let keyword = ''
+
+  // 工具
+  const qs = s=>document.querySelector(s)
+  const grid = ()=> qs('#grid')
+  const items = ()=> (current.children||[]).filter(it=>{
+    if(keyword && !it.name.toLowerCase().includes(keyword)) return false
+    if(onlyMedia && !['image','video','folder'].includes(it.type)) return false
+    if(hideOthers && it.type==='other') return false
+    return true
+  })
+  const stats = list=>{
+    const s={all:list.length,folder:0,image:0,video:0,other:0};
+    list.forEach(i=>s[i.type]++)
+    qs('#stats').textContent=`共 ${s.all} 项 · 文件夹 ${s.folder} · 照片 ${s.image} · 视频 ${s.video}`
+  }
+  function setTile(v){ document.documentElement.style.setProperty('--tile', v+'px') }
+
+  // 渲染
+  function tile(item, idx){
+    const card = document.createElement('div')
+    card.className = 'tile border rounded-lg bg-white hover:shadow transition overflow-hidden ' + (selection.has(item.id)?'ring-2 ring-brand border-brand':'border-slate-200')
+    card.dataset.id=item.id; card.dataset.idx=idx; card.dataset.type=item.type
+    const box = document.createElement('div'); box.className='tile-h bg-slate-100 relative'; card.appendChild(box)
+    if(item.type==='folder'){
+      box.innerHTML = '<div class="absolute left-2 top-2 px-2 py-0.5 text-xs rounded bg-black/40 text-white">文件夹</div>'
+      const cover = (item.children||[]).find(c=>c.type==='image' || c.type==='video')
+      if(cover){ const imgEl = document.createElement('img'); imgEl.src = cover.poster || cover.src; imgEl.className='w-full h-full object-cover'; box.appendChild(imgEl) }
+    } else if(item.type==='image'){
+      const imgEl = document.createElement('img'); imgEl.src=item.poster||item.src; imgEl.className='w-full h-full object-cover'; box.appendChild(imgEl)
+      const meta = document.createElement('div'); meta.className='absolute left-2 top-2 px-2 py-0.5 text-xs rounded bg-black/40 text-white'; meta.textContent=`${item.w}×${item.h}`; box.appendChild(meta)
+    } else if(item.type==='video'){
+      const imgEl = document.createElement('img'); imgEl.src=item.poster; imgEl.className='w-full h-full object-cover'; box.appendChild(imgEl)
+      const play = document.createElement('div'); play.className='absolute inset-0 flex items-center justify-center'; play.innerHTML='<div class="w-10 h-10 rounded-full bg-black/50 flex items-center justify-center text-white"><ion-icon name="play-outline"></ion-icon></div>'
+      box.appendChild(play)
+    } else {
+      box.style.background = item.color || '#CBD5E1'
+    }
+    const row = document.createElement('div'); row.className='px-2 py-1 text-sm flex items-center gap-2'
+    row.innerHTML = `<ion-icon name="${item.type==='folder'?'folder-outline':item.type==='image'?'image-outline':item.type==='video'?'videocam-outline':'document-outline'}" class="text-slate-500"></ion-icon><span class="truncate" title="${item.name}">${item.name}</span>`
+    card.appendChild(row)
+    return card
+  }
+
+  function render(){
+    const list = items(); grid().innerHTML=''
+    if(list.length===0){ qs('#empty').classList.remove('hidden') } else { qs('#empty').classList.add('hidden') }
+    list.forEach((it, idx)=> grid().appendChild(tile(it, idx)))
+    // 面包屑
+    qs('#breadcrumb').textContent = (current===root? '首页' : `首页 / ${current.name}`)
+    stats(list); updateBar(); updateNav()
+  }
+
+  // 导航
+  function enterFolder(node){ if(!node||node.type!=='folder') return; current=node; history=history.slice(0,hi+1); history.push(current); hi++; selection.clear(); render() }
+  function goBack(){ if(hi>0){ hi--; current=history[hi]; selection.clear(); render() } }
+  function goForward(){ if(hi < history.length-1){ hi++; current=history[hi]; selection.clear(); render() } }
+  function goUp(){ if(current!==root){ current=root; history=[current]; hi=0; selection.clear(); render() }}
+
+  // 选择与操作
+  function updateBar(){ const n=selection.size; qs('#bar').classList.toggle('hidden', n===0); qs('#sel').textContent=n }
+  function selectedItems(){ const ids=[...selection]; return items().filter(i=>ids.includes(i.id)) }
+  function openPreview(){ const s=selectedItems(); if(s.length){ showPreview(s[0]) }}
+  function showPreview(item){ const p=qs('#preview'),img=qs('#pvImg'),v=qs('#pvVideo'); if(item.type==='image'){ v.pause(); v.classList.add('hidden'); img.src=item.src; img.classList.remove('hidden') } else if(item.type==='video'){ img.classList.add('hidden'); v.poster=item.poster; v.classList.remove('hidden') } p.classList.remove('hidden'); p.classList.add('flex') }
+  function closePreview(){ const p=qs('#preview'),v=qs('#pvVideo'); v.pause(); p.classList.add('hidden'); p.classList.remove('flex') }
+
+  // 事件
+  grid().addEventListener('click', e=>{
+    const card = e.target.closest('[data-id]'); if(!card) return
+    const id = card.dataset.id; const idx = parseInt(card.dataset.idx); const type = card.dataset.type
+    const list = items(); const item = list[idx]
+    if(e.detail===2){ if(type==='folder') enterFolder(item); else showPreview(item); return }
+    if(e.ctrlKey||e.metaKey){ selection.has(id)? selection.delete(id): selection.add(id) } else { selection.clear(); selection.add(id) }
+    render()
+  })
+  document.addEventListener('dblclick', e=>{ if(!qs('#dblUp').checked) return; if(!e.target.closest('#grid [data-id]')) goUp() })
+  document.addEventListener('keydown', e=>{
+    if(e.key==='Backspace' && !e.target.matches('input,textarea')){ e.preventDefault(); goUp() }
+    if(e.altKey && e.key==='ArrowLeft'){ e.preventDefault(); goBack() }
+    if(e.altKey && e.key==='ArrowRight'){ e.preventDefault(); goForward() }
+    if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='a'){ e.preventDefault(); items().forEach(i=>selection.add(i.id)); render() }
+    if(e.key==='Escape'){ selection.clear(); render() }
+    if(e.key==='Enter'){ openPreview() }
+    if(e.key==='Delete'){ const ids=new Set(selection); current.children=current.children.filter(it=>!ids.has(it.id)); selection.clear(); render() }
+  })
+
+  // 顶部与工具条
+  qs('#btnBack').onclick=goBack
+  qs('#btnForward').onclick=goForward
+  qs('#btnUp').onclick=goUp
+  qs('#zoom').oninput = e=> setTile(e.target.value)
+  qs('#onlyMedia').onchange = e=>{ onlyMedia=e.target.checked; render() }
+  qs('#hideOthers').onchange = e=>{ hideOthers=e.target.checked; render() }
+  qs('#dblUp').onchange = e=>{ dblUp=e.target.checked }
+  qs('#search').oninput = e=>{ keyword=(e.target.value||'').toLowerCase().trim(); render() }
+  // 底部动作
+  qs('#actOpen').onclick = openPreview
+  qs('#actAlbum').onclick = ()=> alert('已加入相册（演示）')
+  qs('#actTags').onclick = ()=> alert('标签已更新（演示）')
+  qs('#actRename').onclick = ()=> alert('已按 EXIF 重命名（演示）')
+  qs('#actMove').onclick = ()=> alert('已移动到备份（演示）')
+  qs('#actDelete').onclick = ()=> { const ids=new Set(selection); current.children=current.children.filter(it=>!ids.has(it.id)); selection.clear(); render() }
+  // 预览
+  qs('#pvClose').onclick = closePreview
+  qs('#previewBg').onclick = closePreview
+  // 主题
+  function setTheme(mode){ document.documentElement.classList.toggle('dark', mode==='dark'); document.body.className = mode==='dark'? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'; localStorage.setItem('argus-theme', mode) }
+  const saved = localStorage.getItem('argus-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'); setTheme(saved)
+  qs('#btnTheme').onclick = ()=> setTheme(document.documentElement.classList.contains('dark')? 'light':'dark')
+
+  // 启动
+  setTile(200); render()
+  function updateNav(){ qs('#btnBack').disabled = hi===0; qs('#btnForward').disabled = hi>=history.length-1; qs('#btnUp').disabled = current===root }
+  </script>
+</body>
+<style>
+  .dark .bg-white{ background:#0f172a }
+  .dark .bg-slate-50{ background:#0b1220 }
+  .dark .text-slate-900{ color:#E2E8F0 }
+  .dark .border-slate-200{ border-color:#253048 }
+  .dark .hover\:bg-slate-100:hover{ background:#172036 }
+  .dark input{ background:#0b1220; color:#E2E8F0; border-color:#253048 }
+  .ring-brand{ box-shadow:0 0 0 2px #3B82F6 inset }
+  .bg-brand{ background:#3B82F6 }
+  .accent-brand{ accent-color:#3B82F6 }
+</style>
+</html>
