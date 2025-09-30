@@ -213,6 +213,114 @@
         .content-area {
             position: relative;
         }
+        .pane-container {
+            transition: all 0.15s ease;
+            position: relative;
+        }
+        .pane-container.inactive {
+            opacity: 0.88;
+        }
+        .pane-container.active {
+            opacity: 1;
+        }
+        .pane-container.active::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(to right, #3b82f6, #60a5fa);
+            z-index: 10;
+        }
+        .pane-inactive-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.015);
+            pointer-events: none;
+            z-index: 5;
+            display: none;
+            transition: background-color 0.15s ease;
+        }
+        .pane-container.inactive .pane-inactive-overlay {
+            display: block;
+        }
+        /* Active pane indicator for breadcrumb - more subtle */
+        .pane-container.active .breadcrumb-area {
+            background-color: rgba(59, 130, 246, 0.02);
+        }
+        /* Clickable breadcrumb area to activate pane */
+        .breadcrumb-header {
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+        .breadcrumb-header:hover {
+            background-color: rgba(59, 130, 246, 0.03);
+        }
+        /* Context Menu */
+        .context-menu {
+            position: fixed;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            min-width: 200px;
+            z-index: 1000;
+            display: none;
+            padding: 4px;
+        }
+        .context-menu.show {
+            display: block;
+        }
+        .context-menu-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #374151;
+            transition: background-color 0.15s ease;
+        }
+        .context-menu-item:hover {
+            background-color: #f3f4f6;
+        }
+        .context-menu-item.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .context-menu-item.disabled:hover {
+            background-color: transparent;
+        }
+        .context-menu-item ion-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        .context-menu-separator {
+            height: 1px;
+            background-color: #e5e7eb;
+            margin: 4px 0;
+        }
+        /* Tooltip */
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 100;
+            white-space: nowrap;
+            display: none;
+            max-width: 300px;
+        }
+        .tooltip.show {
+            display: block;
+        }
     </style>
 </head>
 <body class="bg-gray-50 font-inter">
@@ -302,17 +410,17 @@
         <!-- Main Content -->
         <div id="mainContent" class="flex-1 flex overflow-hidden">
             <!-- Left Pane -->
-            <div id="leftPane" class="flex-1 flex flex-col bg-white border-r border-gray-200">
+            <div id="leftPane" class="pane-container flex-1 flex flex-col bg-white border-r border-gray-200 active">
                 <!-- Breadcrumb -->
-                <div id="leftBreadcrumb" class="px-4 py-2 border-b border-gray-100 bg-gray-50">
+                <div id="leftBreadcrumb" class="breadcrumb-header px-4 py-2 border-b border-gray-100 bg-gray-50" onclick="activatePaneOnly('left')">
                     <div class="flex items-center">
                         <div class="flex items-center space-x-1">
-                            <div class="breadcrumb-area flex items-center space-x-1 text-sm" id="leftBreadcrumbArea">
+                            <div class="breadcrumb-area flex items-center space-x-1 text-sm" id="leftBreadcrumbArea" onclick="event.stopPropagation()">
                                 <div id="leftBreadcrumbContent">
                                     <span class="breadcrumb-item px-2 py-1 rounded text-blue-600 font-medium">Home</span>
                                 </div>
                             </div>
-                            <div class="path-edit-trigger ml-2" onclick="enterEditMode('left')" title="Edit path">
+                            <div class="path-edit-trigger ml-2" onclick="event.stopPropagation(); enterEditMode('left')" title="Edit path">
                                 <ion-icon name="create-outline" class="text-gray-500 text-sm"></ion-icon>
                             </div>
                         </div>
@@ -326,29 +434,30 @@
                 </div>
 
                 <!-- Content Area -->
-                <div class="flex-1 p-4 overflow-auto content-area" id="leftContentArea" onmousedown="startDragSelection(event, 'left')" onmouseup="endDragSelection(event, 'left')" onmousemove="updateDragSelection(event, 'left')" onclick="handleContentAreaClick(event, 'left')">
+                <div class="flex-1 p-4 overflow-auto content-area" id="leftContentArea" onmousedown="handlePaneMouseDown(event, 'left')" onmouseup="endDragSelection(event, 'left')" onmousemove="updateDragSelection(event, 'left')" onclick="handleContentAreaClick(event, 'left')">
                     <div id="leftContent" class="grid grid-medium gap-4">
                         <!-- Content will be loaded here -->
                     </div>
                     <div id="leftSelectionRect" class="selection-rectangle"></div>
                 </div>
+                <div class="pane-inactive-overlay"></div>
             </div>
 
             <!-- Splitter -->
             <div id="splitter" class="w-1 bg-gray-200 pane-splitter horizontal hidden"></div>
 
             <!-- Right Pane (hidden by default) -->
-            <div id="rightPane" class="flex-1 flex-col bg-white hidden">
+            <div id="rightPane" class="pane-container flex-1 flex-col bg-white hidden inactive">
                 <!-- Breadcrumb -->
-                <div id="rightBreadcrumb" class="px-4 py-2 border-b border-gray-100 bg-gray-50">
+                <div id="rightBreadcrumb" class="breadcrumb-header px-4 py-2 border-b border-gray-100 bg-gray-50" onclick="activatePaneOnly('right')">
                     <div class="flex items-center">
                         <div class="flex items-center space-x-1">
-                            <div class="breadcrumb-area flex items-center space-x-1 text-sm" id="rightBreadcrumbArea">
+                            <div class="breadcrumb-area flex items-center space-x-1 text-sm" id="rightBreadcrumbArea" onclick="event.stopPropagation()">
                                 <div id="rightBreadcrumbContent">
                                     <span class="breadcrumb-item px-2 py-1 rounded text-blue-600 font-medium">Home</span>
                                 </div>
                             </div>
-                            <div class="path-edit-trigger ml-2" onclick="enterEditMode('right')" title="Edit path">
+                            <div class="path-edit-trigger ml-2" onclick="event.stopPropagation(); enterEditMode('right')" title="Edit path">
                                 <ion-icon name="create-outline" class="text-gray-500 text-sm"></ion-icon>
                             </div>
                         </div>
@@ -362,15 +471,24 @@
                 </div>
 
                 <!-- Content Area -->
-                <div class="flex-1 p-4 overflow-auto content-area" id="rightContentArea" onmousedown="startDragSelection(event, 'right')" onmouseup="endDragSelection(event, 'right')" onmousemove="updateDragSelection(event, 'right')" onclick="handleContentAreaClick(event, 'right')">
+                <div class="flex-1 p-4 overflow-auto content-area" id="rightContentArea" onmousedown="handlePaneMouseDown(event, 'right')" onmouseup="endDragSelection(event, 'right')" onmousemove="updateDragSelection(event, 'right')" onclick="handleContentAreaClick(event, 'right')">
                     <div id="rightContent" class="grid grid-medium gap-4">
                         <!-- Content will be loaded here -->
                     </div>
                     <div id="rightSelectionRect" class="selection-rectangle"></div>
                 </div>
+                <div class="pane-inactive-overlay"></div>
             </div>
         </div>
     </div>
+
+    <!-- Context Menu -->
+    <div id="contextMenu" class="context-menu">
+        <!-- Menu items will be populated dynamically -->
+    </div>
+
+    <!-- Tooltip -->
+    <div id="tooltip" class="tooltip"></div>
 
     <script>
         // Sample data structure
@@ -471,26 +589,47 @@
                     },
                     'Camera Roll': {
                         type: 'folder',
-                        children: {
-                            'Recent': {
-                                type: 'folder',
-                                children: {
-                                    'IMG_010.jpg': { type: 'photo', size: '3.2 MB', date: '2023-09-25' },
-                                    'IMG_011.jpg': { type: 'photo', size: '2.9 MB', date: '2023-09-25' },
-                                    'IMG_012.jpg': { type: 'photo', size: '3.4 MB', date: '2023-09-26' },
-                                    'IMG_013.jpg': { type: 'photo', size: '4.1 MB', date: '2023-09-26' }
+                        children: (() => {
+                            const items = {
+                                'Recent': {
+                                    type: 'folder',
+                                    children: {}
+                                },
+                                'Favorites': {
+                                    type: 'folder',
+                                    children: {}
                                 }
-                            },
-                            'IMG_001.jpg': { type: 'photo', size: '3.2 MB', date: '2023-09-15' },
-                            'IMG_002.jpg': { type: 'photo', size: '2.9 MB', date: '2023-09-15' },
-                            'IMG_003.jpg': { type: 'photo', size: '3.4 MB', date: '2023-09-16' },
-                            'IMG_004.jpg': { type: 'photo', size: '2.7 MB', date: '2023-09-17' },
-                            'IMG_005.jpg': { type: 'photo', size: '3.8 MB', date: '2023-09-18' },
-                            'IMG_006.jpg': { type: 'photo', size: '4.2 MB', date: '2023-09-19' },
-                            'IMG_007.jpg': { type: 'photo', size: '3.1 MB', date: '2023-09-20' },
-                            'IMG_008.jpg': { type: 'photo', size: '2.8 MB', date: '2023-09-21' },
-                            'IMG_009.jpg': { type: 'photo', size: '3.6 MB', date: '2023-09-22' }
-                        }
+                            };
+                            // 生成100张照片
+                            for (let i = 1; i <= 100; i++) {
+                                const size = (Math.random() * 3 + 1).toFixed(1);
+                                const day = Math.floor(Math.random() * 30) + 1;
+                                items[`IMG_${String(i).padStart(4, '0')}.jpg`] = {
+                                    type: 'photo',
+                                    size: `${size} MB`,
+                                    date: `2023-09-${String(day).padStart(2, '0')}`
+                                };
+                            }
+                            // Recent文件夹也添加一些照片
+                            for (let i = 1; i <= 30; i++) {
+                                const size = (Math.random() * 3 + 1).toFixed(1);
+                                items.Recent.children[`Recent_${String(i).padStart(3, '0')}.jpg`] = {
+                                    type: 'photo',
+                                    size: `${size} MB`,
+                                    date: `2023-12-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`
+                                };
+                            }
+                            // Favorites文件夹添加照片
+                            for (let i = 1; i <= 20; i++) {
+                                const size = (Math.random() * 4 + 1).toFixed(1);
+                                items.Favorites.children[`Favorite_${i}.jpg`] = {
+                                    type: 'photo',
+                                    size: `${size} MB`,
+                                    date: `2023-11-${String(Math.floor(Math.random() * 30) + 1).padStart(2, '0')}`
+                                };
+                            }
+                            return items;
+                        })()
                     },
                     'Archives': {
                         type: 'folder',
@@ -522,12 +661,15 @@
         let leftPath = ['Home'];
         let rightPath = ['Home'];
         let isDragging = false;
+        let activePane = 'left'; // Track which pane is currently active
 
         // Selection state
         let leftSelectedItems = new Set();
         let rightSelectedItems = new Set();
         let leftFocusedItem = null;
         let rightFocusedItem = null;
+        let leftAnchorItem = null; // For shift selection
+        let rightAnchorItem = null; // For shift selection
 
         // Drag selection state
         let isDragSelecting = false;
@@ -536,6 +678,220 @@
         let dragCurrentX = 0;
         let dragCurrentY = 0;
         let dragPane = null;
+        let dragInitialSelections = new Set(); // Store selections before drag starts
+        let dragCtrlKey = false; // Store ctrl key state during drag
+        let justFinishedDrag = false; // Prevent click event from clearing selection after drag
+
+        // Context Menu State
+        let contextMenuVisible = false;
+        let contextMenuPane = null;
+        let contextMenuTarget = null;
+
+        // Show context menu
+        function showContextMenu(event, pane, targetItem = null) {
+            event.preventDefault();
+
+            const menu = document.getElementById('contextMenu');
+            contextMenuPane = pane;
+            contextMenuTarget = targetItem;
+
+            // Build menu items based on context
+            let menuHTML = '';
+
+            if (targetItem) {
+                // Right-clicked on an item
+                const selectedItems = pane === 'left' ? leftSelectedItems : rightSelectedItems;
+                const isSelected = selectedItems.has(targetItem);
+                const selectionCount = selectedItems.size;
+
+                menuHTML = `
+                    <div class="context-menu-item" onclick="openItem('${pane}', '${targetItem}')">
+                        <ion-icon name="open-outline"></ion-icon>
+                        <span>打开</span>
+                    </div>
+                    <div class="context-menu-separator"></div>
+                    <div class="context-menu-item" onclick="cutItems('${pane}')">
+                        <ion-icon name="cut-outline"></ion-icon>
+                        <span>剪切${selectionCount > 1 ? ' (' + selectionCount + ' 项)' : ''}</span>
+                    </div>
+                    <div class="context-menu-item" onclick="copyItems('${pane}')">
+                        <ion-icon name="copy-outline"></ion-icon>
+                        <span>复制${selectionCount > 1 ? ' (' + selectionCount + ' 项)' : ''}</span>
+                    </div>
+                    <div class="context-menu-separator"></div>
+                    <div class="context-menu-item" onclick="deleteItems('${pane}')">
+                        <ion-icon name="trash-outline"></ion-icon>
+                        <span>删除${selectionCount > 1 ? ' (' + selectionCount + ' 项)' : ''}</span>
+                    </div>
+                    <div class="context-menu-item" onclick="renameItem('${pane}', '${targetItem}')">
+                        <ion-icon name="create-outline"></ion-icon>
+                        <span>重命名</span>
+                    </div>
+                    <div class="context-menu-separator"></div>
+                    <div class="context-menu-item" onclick="showProperties('${pane}', '${targetItem}')">
+                        <ion-icon name="information-circle-outline"></ion-icon>
+                        <span>属性</span>
+                    </div>
+                `;
+            } else {
+                // Right-clicked on empty area
+                menuHTML = `
+                    <div class="context-menu-item" onclick="pasteItems('${pane}')">
+                        <ion-icon name="clipboard-outline"></ion-icon>
+                        <span>粘贴</span>
+                    </div>
+                    <div class="context-menu-separator"></div>
+                    <div class="context-menu-item" onclick="createNewFolder('${pane}')">
+                        <ion-icon name="folder-outline"></ion-icon>
+                        <span>新建文件夹</span>
+                    </div>
+                    <div class="context-menu-separator"></div>
+                    <div class="context-menu-item" onclick="selectAllItems('${pane}')">
+                        <ion-icon name="checkbox-outline"></ion-icon>
+                        <span>全选</span>
+                    </div>
+                    <div class="context-menu-item" onclick="refreshPane('${pane}')">
+                        <ion-icon name="refresh-outline"></ion-icon>
+                        <span>刷新</span>
+                    </div>
+                `;
+            }
+
+            menu.innerHTML = menuHTML;
+
+            // Position the menu
+            const menuWidth = 200;
+            const menuHeight = menu.offsetHeight || 300;
+            let x = event.clientX;
+            let y = event.clientY;
+
+            // Adjust if menu would go off screen
+            if (x + menuWidth > window.innerWidth) {
+                x = window.innerWidth - menuWidth - 10;
+            }
+            if (y + menuHeight > window.innerHeight) {
+                y = window.innerHeight - menuHeight - 10;
+            }
+
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+            menu.classList.add('show');
+            contextMenuVisible = true;
+
+            // Hide menu on any click
+            setTimeout(() => {
+                document.addEventListener('click', hideContextMenu, { once: true });
+                document.addEventListener('contextmenu', hideContextMenu, { once: true });
+            }, 0);
+        }
+
+        // Hide context menu
+        function hideContextMenu() {
+            const menu = document.getElementById('contextMenu');
+            menu.classList.remove('show');
+            contextMenuVisible = false;
+            contextMenuPane = null;
+            contextMenuTarget = null;
+        }
+
+        // Context menu actions (placeholder implementations)
+        function openItem(pane, itemName) {
+            const path = pane === 'left' ? leftPath : rightPath;
+            const currentFolder = getCurrentFolder(path);
+            const item = currentFolder[itemName];
+
+            if (item && item.type === 'folder') {
+                navigateToFolder(pane, itemName);
+            }
+            hideContextMenu();
+        }
+
+        function cutItems(pane) {
+            console.log('Cut items from', pane);
+            hideContextMenu();
+        }
+
+        function copyItems(pane) {
+            console.log('Copy items from', pane);
+            hideContextMenu();
+        }
+
+        function pasteItems(pane) {
+            console.log('Paste items to', pane);
+            hideContextMenu();
+        }
+
+        function deleteItems(pane) {
+            const selectedItems = pane === 'left' ? leftSelectedItems : rightSelectedItems;
+            console.log('Delete items:', Array.from(selectedItems));
+            hideContextMenu();
+        }
+
+        function renameItem(pane, itemName) {
+            console.log('Rename item:', itemName);
+            hideContextMenu();
+        }
+
+        function createNewFolder(pane) {
+            console.log('Create new folder in', pane);
+            hideContextMenu();
+        }
+
+        function selectAllItems(pane) {
+            const items = getVisibleItems(pane);
+            const selectedItems = pane === 'left' ? leftSelectedItems : rightSelectedItems;
+
+            clearAllSelections(pane);
+            items.forEach(item => {
+                selectedItems.add(item.name);
+                addItemSelection(pane, item.name);
+            });
+
+            hideContextMenu();
+        }
+
+        function refreshPane(pane) {
+            loadContent(pane);
+            hideContextMenu();
+        }
+
+        function showProperties(pane, itemName) {
+            const path = pane === 'left' ? leftPath : rightPath;
+            const currentFolder = getCurrentFolder(path);
+            const item = currentFolder[itemName];
+
+            if (item) {
+                alert(`名称: ${itemName}\n类型: ${item.type === 'folder' ? '文件夹' : '文件'}\n大小: ${item.size || 'N/A'}\n日期: ${item.date || 'N/A'}`);
+            }
+
+            hideContextMenu();
+        }
+
+        // Tooltip functions
+        let tooltipTimeout = null;
+
+        function showTooltip(event, text) {
+            clearTimeout(tooltipTimeout);
+
+            tooltipTimeout = setTimeout(() => {
+                const tooltip = document.getElementById('tooltip');
+                tooltip.textContent = text;
+                tooltip.classList.add('show');
+
+                // Position tooltip
+                const x = event.clientX + 10;
+                const y = event.clientY + 10;
+
+                tooltip.style.left = x + 'px';
+                tooltip.style.top = y + 'px';
+            }, 500); // Show after 500ms hover
+        }
+
+        function hideTooltip() {
+            clearTimeout(tooltipTimeout);
+            const tooltip = document.getElementById('tooltip');
+            tooltip.classList.remove('show');
+        }
 
         // Initialize the application
         function init() {
@@ -543,6 +899,31 @@
             updateBreadcrumb('left');
             setupSplitter();
             setupKeyboardNavigation();
+            setupContextMenu();
+        }
+
+        // Setup context menu event listeners
+        function setupContextMenu() {
+            // Prevent default context menu on content areas
+            document.getElementById('leftContentArea').addEventListener('contextmenu', (e) => {
+                const item = e.target.closest('.selectable-item');
+                if (item) {
+                    const itemName = item.dataset.itemName;
+                    showContextMenu(e, 'left', itemName);
+                } else {
+                    showContextMenu(e, 'left', null);
+                }
+            });
+
+            document.getElementById('rightContentArea').addEventListener('contextmenu', (e) => {
+                const item = e.target.closest('.selectable-item');
+                if (item) {
+                    const itemName = item.dataset.itemName;
+                    showContextMenu(e, 'right', itemName);
+                } else {
+                    showContextMenu(e, 'right', null);
+                }
+            });
         }
 
         // Get current folder from path
@@ -568,9 +949,11 @@
             if (pane === 'left') {
                 leftSelectedItems.clear();
                 leftFocusedItem = null;
+                leftAnchorItem = null;
             } else {
                 rightSelectedItems.clear();
                 rightFocusedItem = null;
+                rightAnchorItem = null;
             }
 
             if (!currentFolder) {
@@ -651,9 +1034,15 @@
                 contentElement.innerHTML = html;
             }
 
-            // Set default selection to first item
+            // Set default focus to first item (but don't select it)
             if (items.length > 0) {
-                setFocusedItem(pane, items[0][0], 0);
+                if (pane === 'left') {
+                    leftFocusedItem = { name: items[0][0], index: 0 };
+                    leftAnchorItem = { name: items[0][0], index: 0 };
+                } else {
+                    rightFocusedItem = { name: items[0][0], index: 0 };
+                    rightAnchorItem = { name: items[0][0], index: 0 };
+                }
             }
         }
 
@@ -1104,10 +1493,47 @@
         function handleItemClick(event, pane, itemName, index) {
             event.stopPropagation();
 
-            const selectedItems = pane === 'left' ? leftSelectedItems : rightSelectedItems;
+            // Activate the pane when clicking an item
+            setActivePane(pane);
 
-            if (event.ctrlKey || event.metaKey) {
-                // Multi-select with Ctrl/Cmd
+            const selectedItems = pane === 'left' ? leftSelectedItems : rightSelectedItems;
+            const items = getVisibleItems(pane);
+
+            if (event.shiftKey) {
+                // Range selection with Shift
+                const anchorItem = pane === 'left' ? leftAnchorItem : rightAnchorItem;
+
+                if (anchorItem !== null) {
+                    // Clear previous selections if not holding Ctrl
+                    if (!event.ctrlKey && !event.metaKey) {
+                        clearAllSelections(pane);
+                    }
+
+                    // Select range from anchor to current
+                    const startIndex = Math.min(anchorItem.index, index);
+                    const endIndex = Math.max(anchorItem.index, index);
+
+                    for (let i = startIndex; i <= endIndex; i++) {
+                        if (items[i]) {
+                            selectedItems.add(items[i].name);
+                            addItemSelection(pane, items[i].name);
+                        }
+                    }
+                } else {
+                    // No anchor, treat as normal click
+                    clearAllSelections(pane);
+                    selectedItems.add(itemName);
+                    addItemSelection(pane, itemName);
+
+                    // Set anchor
+                    if (pane === 'left') {
+                        leftAnchorItem = { name: itemName, index: index };
+                    } else {
+                        rightAnchorItem = { name: itemName, index: index };
+                    }
+                }
+            } else if (event.ctrlKey || event.metaKey) {
+                // Toggle selection with Ctrl/Cmd
                 if (selectedItems.has(itemName)) {
                     selectedItems.delete(itemName);
                     removeItemSelection(pane, itemName);
@@ -1115,11 +1541,25 @@
                     selectedItems.add(itemName);
                     addItemSelection(pane, itemName);
                 }
+
+                // Update anchor
+                if (pane === 'left') {
+                    leftAnchorItem = { name: itemName, index: index };
+                } else {
+                    rightAnchorItem = { name: itemName, index: index };
+                }
             } else {
-                // Single select - clear all previous selections first
+                // Single select - clear all previous selections
                 clearAllSelections(pane);
                 selectedItems.add(itemName);
                 addItemSelection(pane, itemName);
+
+                // Set anchor
+                if (pane === 'left') {
+                    leftAnchorItem = { name: itemName, index: index };
+                } else {
+                    rightAnchorItem = { name: itemName, index: index };
+                }
             }
 
             setFocusedItem(pane, itemName, index);
@@ -1127,10 +1567,13 @@
 
         // Set focused item
         function setFocusedItem(pane, itemName, index) {
-            // Clear previous focus
-            document.querySelectorAll(`[data-pane="${pane}"] .item-focused`).forEach(el => {
-                el.classList.remove('item-focused');
-            });
+            // Clear previous focus in the specific pane
+            const contentArea = document.getElementById(pane + 'ContentArea');
+            if (contentArea) {
+                contentArea.querySelectorAll('.item-focused').forEach(el => {
+                    el.classList.remove('item-focused');
+                });
+            }
 
             if (pane === 'left') {
                 leftFocusedItem = { name: itemName, index: index };
@@ -1177,13 +1620,25 @@
                 const activePane = getActivePane();
                 if (!activePane) return;
 
+                // Don't interfere with path input
+                if (event.target.tagName === 'INPUT') return;
+
                 const items = getVisibleItems(activePane);
                 if (items.length === 0) return;
 
                 const focusedItem = activePane === 'left' ? leftFocusedItem : rightFocusedItem;
+                const selectedItems = activePane === 'left' ? leftSelectedItems : rightSelectedItems;
+
+                // If no focused item, focus first item
+                if (!focusedItem && items.length > 0) {
+                    setFocusedItem(activePane, items[0].name, 0);
+                    return;
+                }
+
                 if (!focusedItem) return;
 
                 let newIndex = focusedItem.index;
+                let shouldUpdateFocus = false;
 
                 switch (event.key) {
                     case 'ArrowUp':
@@ -1192,32 +1647,40 @@
                             newIndex = Math.max(0, focusedItem.index - 1);
                         } else {
                             // Grid view - move up by number of columns
-                            const cols = getGridColumns();
+                            const cols = getGridColumns(activePane);
                             newIndex = Math.max(0, focusedItem.index - cols);
                         }
+                        shouldUpdateFocus = true;
                         break;
+
                     case 'ArrowDown':
                         event.preventDefault();
                         if (viewMode === 'list') {
                             newIndex = Math.min(items.length - 1, focusedItem.index + 1);
                         } else {
                             // Grid view - move down by number of columns
-                            const cols = getGridColumns();
+                            const cols = getGridColumns(activePane);
                             newIndex = Math.min(items.length - 1, focusedItem.index + cols);
                         }
+                        shouldUpdateFocus = true;
                         break;
+
                     case 'ArrowLeft':
                         if (viewMode === 'grid') {
                             event.preventDefault();
                             newIndex = Math.max(0, focusedItem.index - 1);
+                            shouldUpdateFocus = true;
                         }
                         break;
+
                     case 'ArrowRight':
                         if (viewMode === 'grid') {
                             event.preventDefault();
                             newIndex = Math.min(items.length - 1, focusedItem.index + 1);
+                            shouldUpdateFocus = true;
                         }
                         break;
+
                     case 'Enter':
                         event.preventDefault();
                         const currentItem = items[focusedItem.index];
@@ -1225,9 +1688,10 @@
                             navigateToFolder(activePane, currentItem.name);
                         }
                         break;
+
                     case ' ':
                         event.preventDefault();
-                        const selectedItems = activePane === 'left' ? leftSelectedItems : rightSelectedItems;
+                        // Space toggles selection of focused item
                         const currentItemName = items[focusedItem.index].name;
                         if (selectedItems.has(currentItemName)) {
                             selectedItems.delete(currentItemName);
@@ -1236,19 +1700,86 @@
                             selectedItems.add(currentItemName);
                             addItemSelection(activePane, currentItemName);
                         }
+
+                        // Update anchor
+                        if (activePane === 'left') {
+                            leftAnchorItem = { name: currentItemName, index: focusedItem.index };
+                        } else {
+                            rightAnchorItem = { name: currentItemName, index: focusedItem.index };
+                        }
+                        break;
+
+                    case 'a':
+                        // Ctrl+A to select all
+                        if (event.ctrlKey || event.metaKey) {
+                            event.preventDefault();
+                            clearAllSelections(activePane);
+                            items.forEach(item => {
+                                selectedItems.add(item.name);
+                                addItemSelection(activePane, item.name);
+                            });
+                        }
                         break;
                 }
 
-                if (newIndex !== focusedItem.index && (event.key.startsWith('Arrow') || event.key === 'Enter')) {
+                // Handle focus and selection changes for arrow keys
+                if (shouldUpdateFocus && newIndex !== focusedItem.index) {
                     const newItem = items[newIndex];
-                    if (newItem) {
+                    if (!newItem) return;
+
+                    if (event.shiftKey) {
+                        // Shift+Arrow: extend selection from anchor to new position
+                        const anchorItem = activePane === 'left' ? leftAnchorItem : rightAnchorItem;
+
+                        if (anchorItem !== null) {
+                            // Clear and reselect range
+                            clearAllSelections(activePane);
+
+                            const startIndex = Math.min(anchorItem.index, newIndex);
+                            const endIndex = Math.max(anchorItem.index, newIndex);
+
+                            for (let i = startIndex; i <= endIndex; i++) {
+                                if (items[i]) {
+                                    selectedItems.add(items[i].name);
+                                    addItemSelection(activePane, items[i].name);
+                                }
+                            }
+                        } else {
+                            // No anchor, select from current to new
+                            const startIndex = Math.min(focusedItem.index, newIndex);
+                            const endIndex = Math.max(focusedItem.index, newIndex);
+
+                            for (let i = startIndex; i <= endIndex; i++) {
+                                if (items[i]) {
+                                    selectedItems.add(items[i].name);
+                                    addItemSelection(activePane, items[i].name);
+                                }
+                            }
+
+                            // Set anchor to starting position
+                            if (activePane === 'left') {
+                                leftAnchorItem = { name: focusedItem.name, index: focusedItem.index };
+                            } else {
+                                rightAnchorItem = { name: focusedItem.name, index: focusedItem.index };
+                            }
+                        }
+
+                        setFocusedItem(activePane, newItem.name, newIndex);
+                    } else if (event.ctrlKey || event.metaKey) {
+                        // Ctrl+Arrow: move focus only, don't change selection
+                        setFocusedItem(activePane, newItem.name, newIndex);
+                    } else {
+                        // Plain arrow: move focus and select only the new item
+                        clearAllSelections(activePane);
+                        selectedItems.add(newItem.name);
+                        addItemSelection(activePane, newItem.name);
                         setFocusedItem(activePane, newItem.name, newIndex);
 
-                        // Auto-select on navigation if no items are selected
-                        const selectedItems = activePane === 'left' ? leftSelectedItems : rightSelectedItems;
-                        if (selectedItems.size === 0) {
-                            selectedItems.add(newItem.name);
-                            addItemSelection(activePane, newItem.name);
+                        // Update anchor
+                        if (activePane === 'left') {
+                            leftAnchorItem = { name: newItem.name, index: newIndex };
+                        } else {
+                            rightAnchorItem = { name: newItem.name, index: newIndex };
                         }
                     }
                 }
@@ -1257,17 +1788,7 @@
 
         // Get currently active pane
         function getActivePane() {
-            const leftPane = document.getElementById('leftPane');
-            const rightPane = document.getElementById('rightPane');
-
-            if (document.activeElement && leftPane.contains(document.activeElement)) {
-                return 'left';
-            } else if (document.activeElement && rightPane.contains(document.activeElement)) {
-                return 'right';
-            } else {
-                // Default to left pane
-                return 'left';
-            }
+            return activePane;
         }
 
         // Get visible items in current folder
@@ -1288,24 +1809,88 @@
         }
 
         // Get number of columns in grid view
-        function getGridColumns() {
-            const contentElement = document.getElementById('leftContent');
+        function getGridColumns(pane) {
+            const contentElement = document.getElementById((pane || activePane) + 'Content');
             if (!contentElement) return 4;
 
-            const computedStyle = window.getComputedStyle(contentElement);
-            const gridCols = computedStyle.gridTemplateColumns;
+            const items = contentElement.querySelectorAll('.selectable-item');
+            if (items.length < 2) return 1;
 
-            if (gridCols && gridCols !== 'none') {
-                return gridCols.split(' ').length;
+            // 计算实际列数：检查前两个元素的位置
+            const firstRect = items[0].getBoundingClientRect();
+            const secondRect = items[1].getBoundingClientRect();
+
+            // 如果第二个元素在第一个右边（同一行），继续计算列数
+            if (Math.abs(secondRect.top - firstRect.top) < 10) {
+                // 它们在同一行，计算一行有多少个
+                let cols = 1;
+                for (let i = 1; i < items.length; i++) {
+                    const rect = items[i].getBoundingClientRect();
+                    if (Math.abs(rect.top - firstRect.top) < 10) {
+                        cols++;
+                    } else {
+                        break;
+                    }
+                }
+                return cols;
             }
 
-            // Fallback based on thumbnail size
-            switch (thumbnailSize) {
-                case 'small': return 8;
-                case 'medium': return 6;
-                case 'large': return 4;
-                default: return 4;
+            // 第二个元素在第一个下面，说明只有一列
+            return 1;
+        }
+
+        // Set active pane
+        function setActivePane(pane) {
+            activePane = pane;
+
+            const leftPane = document.getElementById('leftPane');
+            const rightPane = document.getElementById('rightPane');
+
+            if (pane === 'left') {
+                leftPane.classList.add('active');
+                leftPane.classList.remove('inactive');
+                if (!rightPane.classList.contains('hidden')) {
+                    rightPane.classList.add('inactive');
+                    rightPane.classList.remove('active');
+                }
+            } else {
+                rightPane.classList.add('active');
+                rightPane.classList.remove('inactive');
+                leftPane.classList.add('inactive');
+                leftPane.classList.remove('active');
             }
+        }
+
+        // Activate pane without clearing selections (for breadcrumb clicks)
+        function activatePaneOnly(pane) {
+            setActivePane(pane);
+
+            // Set focus to the first selected item or focused item if any
+            const selectedItems = pane === 'left' ? leftSelectedItems : rightSelectedItems;
+            const focusedItem = pane === 'left' ? leftFocusedItem : rightFocusedItem;
+
+            if (selectedItems.size > 0 && focusedItem) {
+                // Re-focus the existing focused item to ensure keyboard navigation works
+                const itemElement = document.querySelector(`[data-pane="${pane}"][data-item-name="${focusedItem.name}"]`);
+                if (itemElement) {
+                    itemElement.focus();
+                }
+            } else if (focusedItem) {
+                // Just refocus the item
+                const itemElement = document.querySelector(`[data-pane="${pane}"][data-item-name="${focusedItem.name}"]`);
+                if (itemElement) {
+                    itemElement.focus();
+                }
+            }
+        }
+
+        // Handle pane mouse down - activate pane and start drag selection
+        function handlePaneMouseDown(event, pane) {
+            // Activate the pane
+            setActivePane(pane);
+
+            // Start drag selection
+            startDragSelection(event, pane);
         }
 
         // Start drag selection
@@ -1315,8 +1900,12 @@
                 return;
             }
 
+            // Reset the flag
+            justFinishedDrag = false;
+
             isDragSelecting = true;
             dragPane = pane;
+            dragCtrlKey = event.ctrlKey || event.metaKey;
 
             const contentArea = document.getElementById(pane + 'ContentArea');
             const rect = contentArea.getBoundingClientRect();
@@ -1326,11 +1915,12 @@
             dragCurrentX = dragStartX;
             dragCurrentY = dragStartY;
 
-            // Store the initial event for later use
-            window.dragEvent = event;
+            // Store initial selections when Ctrl is held
+            const selectedItems = pane === 'left' ? leftSelectedItems : rightSelectedItems;
+            dragInitialSelections = new Set(selectedItems);
 
             // Clear previous selections if not holding Ctrl
-            if (!event.ctrlKey && !event.metaKey) {
+            if (!dragCtrlKey) {
                 clearAllSelections(pane);
             }
 
@@ -1353,7 +1943,7 @@
             updateSelectionRectangle(pane);
 
             // Check which items intersect with selection rectangle
-            updateItemSelection(pane, event);
+            updateItemSelection(pane);
         }
 
         // End drag selection
@@ -1362,12 +1952,51 @@
                 return;
             }
 
-            // Final selection update to ensure all intersecting items are selected
-            updateItemSelection(pane, window.dragEvent);
+            // Check if this was actually a drag (mouse moved significantly)
+            const dragDistance = Math.sqrt(
+                Math.pow(dragCurrentX - dragStartX, 2) +
+                Math.pow(dragCurrentY - dragStartY, 2)
+            );
 
+            // Only treat as drag if moved more than 5 pixels
+            if (dragDistance > 5) {
+                justFinishedDrag = true;
+
+                // Final selection update to ensure all intersecting items are selected
+                updateItemSelection(pane);
+
+                // Set focus to the last selected item
+                const selectedItems = pane === 'left' ? leftSelectedItems : rightSelectedItems;
+                if (selectedItems.size > 0) {
+                    const items = getVisibleItems(pane);
+                    const selectedArray = Array.from(selectedItems);
+                    const lastSelected = selectedArray[selectedArray.length - 1];
+
+                    // Find index of last selected item
+                    const itemIndex = items.findIndex(item => item.name === lastSelected);
+                    if (itemIndex !== -1) {
+                        setFocusedItem(pane, lastSelected, itemIndex);
+
+                        // Set anchor to last selected item
+                        if (pane === 'left') {
+                            leftAnchorItem = { name: lastSelected, index: itemIndex };
+                        } else {
+                            rightAnchorItem = { name: lastSelected, index: itemIndex };
+                        }
+                    }
+                }
+
+                // Clear the flag after a short delay to allow click event to check it
+                setTimeout(() => {
+                    justFinishedDrag = false;
+                }, 100);
+            }
+
+            // Cleanup
             isDragSelecting = false;
             dragPane = null;
-            window.dragEvent = null;
+            dragCtrlKey = false;
+            dragInitialSelections.clear();
 
             // Hide selection rectangle
             const selectionRect = document.getElementById(pane + 'SelectionRect');
@@ -1391,7 +2020,7 @@
         }
 
         // Update item selection based on rectangle intersection
-        function updateItemSelection(pane, event) {
+        function updateItemSelection(pane) {
             const contentArea = document.getElementById(pane + 'ContentArea');
             const items = contentArea.querySelectorAll('.selectable-item');
 
@@ -1425,16 +2054,23 @@
                 }
             });
 
-            // Update selection based on whether Ctrl is held
+            // Update selection based on whether Ctrl was held at drag start
             const selectedItems = pane === 'left' ? leftSelectedItems : rightSelectedItems;
 
-            if (event && (event.ctrlKey || event.metaKey)) {
-                // Additive selection - only add new items
+            if (dragCtrlKey) {
+                // Additive selection - restore initial selections and add drag selections
+                clearAllSelections(pane);
+
+                // Re-add initial selections
+                dragInitialSelections.forEach(itemName => {
+                    selectedItems.add(itemName);
+                    addItemSelection(pane, itemName);
+                });
+
+                // Add new drag selections
                 itemsInSelection.forEach(itemName => {
-                    if (!selectedItems.has(itemName)) {
-                        selectedItems.add(itemName);
-                        addItemSelection(pane, itemName);
-                    }
+                    selectedItems.add(itemName);
+                    addItemSelection(pane, itemName);
                 });
             } else {
                 // Replace selection - clear all and select only intersecting items
@@ -1448,6 +2084,11 @@
 
         // Add click handler to clear selection when clicking empty area
         function handleContentAreaClick(event, pane) {
+            // Don't clear if we just finished a drag selection
+            if (justFinishedDrag) {
+                return;
+            }
+
             // Only clear selection if clicking on empty area (not on an item)
             if (!event.target.closest('.selectable-item') && !isDragSelecting) {
                 if (!event.ctrlKey && !event.metaKey) {
