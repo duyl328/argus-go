@@ -133,7 +133,7 @@
       </div>
 
       <!-- Selection Rectangle -->
-      <div v-if="dragSelection.isSelecting" class="selection-rectangle" :style="selectionRectStyle"></div>
+      <div v-if="dragSelection.isSelecting" class="selection-rectangle" :style="selectionBoxStyle"></div>
     </div>
 
     <!-- Inactive Overlay -->
@@ -183,13 +183,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick, reactive } from 'vue'
 import { useFileSelection } from '@/composables/fileManager/useFileSelection'
 import { useKeyboardNav } from '@/composables/fileManager/useKeyboardNav'
-import { mockFolderStructure } from './mockData'
+import { useDragSelection } from '@/composables/fileManager/useDragSelection'
+import { useDragAndDrop } from '@/composables/fileManager/useDragAndDrop'
+import { moveItems, getFolderByPath, searchItems } from '@/utils/fileManager/fileOperations'
+import { mockFolderStructure as originalMockData } from './mockData'
 import type { FileItem, ViewMode, ThumbnailSize, PaneId } from './types'
 import ContextMenu from './ContextMenu.vue'
 import Tooltip from './Tooltip.vue'
+
+// 将 mockData 转换为响应式对象（全局共享）
+const mockFolderStructure = reactive(originalMockData)
 
 const props = defineProps<{
   paneId: PaneId
@@ -207,7 +213,6 @@ const currentPath = ref<string[]>(['Home'])
 const contentAreaRef = ref<HTMLElement>()
 const tooltipRef = ref<InstanceType<typeof Tooltip>>()
 const pathInputRef = ref<HTMLInputElement>()
-const selection = useFileSelection()
 const searchQuery = ref('')
 const pathEditMode = ref(false)
 const pathEditValue = ref('')
@@ -230,44 +235,18 @@ const breadcrumbDropdown = ref({
   folders: [] as string[]
 })
 
-// Drag selection state
-const dragSelection = ref({
-  isSelecting: false,
-  startX: 0,
-  startY: 0,
-  currentX: 0,
-  currentY: 0,
-  initialSelections: new Set<string>(),
-  ctrlKey: false,
-  justFinished: false
-})
+// Composables
+const selection = useFileSelection()
+const dragSelectionLogic = useDragSelection()
+const dragDropLogic = useDragAndDrop()
 
-// Auto scroll state
-const autoScroll = ref({
-  isScrolling: false,
-  direction: { x: 0, y: 0 }
-})
-
-// Drag and drop state
-const dragState = ref({
-  isDragging: false,
-  draggedItems: [] as string[],
-  dropTarget: null as string | null,
-  sourcePane: null as string | null,
-  isPaneDragOver: false
-})
+// 解构composables以便使用
+const { dragSelection, autoScroll, selectionBoxStyle, startDragSelection, updateDragSelection, checkAutoScroll, startAutoScroll, finishDragSelection, cancelDragSelection, isIntersecting } = dragSelectionLogic
+const { dragState, startDrag, setDropTarget, setPaneDragOver, createDragPreview, cleanupDragPreview, endDrag, resetDragState } = dragDropLogic
 
 // Computed
 const currentFolder = computed(() => {
-  let folder = mockFolderStructure
-  for (const segment of currentPath.value) {
-    if (folder[segment] && folder[segment].children) {
-      folder = folder[segment].children as any
-    } else {
-      return null
-    }
-  }
-  return folder
+  return getFolderByPath(mockFolderStructure, currentPath.value)
 })
 
 const visibleItems = computed(() => {
@@ -286,20 +265,6 @@ const visibleItems = computed(() => {
   }
 
   return items
-})
-
-const selectionRectStyle = computed(() => {
-  const left = Math.min(dragSelection.value.startX, dragSelection.value.currentX)
-  const top = Math.min(dragSelection.value.startY, dragSelection.value.currentY)
-  const width = Math.abs(dragSelection.value.currentX - dragSelection.value.startX)
-  const height = Math.abs(dragSelection.value.currentY - dragSelection.value.startY)
-
-  return {
-    left: `${left}px`,
-    top: `${top}px`,
-    width: `${width}px`,
-    height: `${height}px`
-  }
 })
 
 // Methods
@@ -443,6 +408,9 @@ function isFocused(itemName: string): boolean {
 function handleItemClick(event: MouseEvent, itemName: string, index: number) {
   event.stopPropagation()
 
+  // 激活当前面板
+  emit('activate')
+
   if (event.shiftKey && selection.anchorItem.value) {
     // Range selection
     selection.clearSelection()
@@ -477,24 +445,18 @@ function handleMouseDown(event: MouseEvent) {
 
   emit('activate')
 
-  const rect = contentAreaRef.value?.getBoundingClientRect()
-  if (!rect) return
+  if (!contentAreaRef.value) return
 
-  const scrollEl = contentAreaRef.value!
-  dragSelection.value = {
-    isSelecting: true,
-    startX: event.clientX - rect.left + scrollEl.scrollLeft,
-    startY: event.clientY - rect.top + scrollEl.scrollTop,
-    currentX: event.clientX - rect.left + scrollEl.scrollLeft,
-    currentY: event.clientY - rect.top + scrollEl.scrollTop,
-    initialSelections: new Set(selection.selectedItems.value),
-    ctrlKey: event.ctrlKey || event.metaKey,
-    justFinished: false
-  }
+  // 使用composable开始拖拽选择
+  const ctrlKey = event.ctrlKey || event.metaKey
+  startDragSelection(event, contentAreaRef.value, ctrlKey, selection.selectedItems.value)
 
-  if (!dragSelection.value.ctrlKey) {
+  if (!ctrlKey) {
     selection.clearSelection()
   }
+
+  // 启动自动滚动（带回调更新选择）
+  startAutoScroll(contentAreaRef.value, updateSelectionFromDragBox)
 
   // 在 document 级别监听 mousemove 和 mouseup
   const onDocumentMouseMove = (e: MouseEvent) => {
@@ -514,54 +476,34 @@ function handleMouseDown(event: MouseEvent) {
 }
 
 function handleMouseMove(event: MouseEvent) {
-  if (!dragSelection.value.isSelecting) return
+  // 如果不在拖拽选择状态，隐藏tooltip（防止在空白区域显示）
+  if (!dragSelection.value.isSelecting) {
+    const target = event.target as HTMLElement
+    if (!target.closest('.file-item') && !target.closest('.list-item')) {
+      tooltipRef.value?.hide()
+    }
+    return
+  }
 
-  const rect = contentAreaRef.value?.getBoundingClientRect()
-  if (!rect) return
+  if (!contentAreaRef.value) return
 
-  const scrollEl = contentAreaRef.value!
-
-  // 计算鼠标相对于内容区域的位置（包含滚动偏移）
-  // 鼠标在视口中的位置 + 滚动偏移 = 在文档中的绝对位置
-  const rawX = event.clientX - rect.left + scrollEl.scrollLeft
-  const rawY = event.clientY - rect.top + scrollEl.scrollTop
-
-  // 限制坐标在合理范围内
-  // 当鼠标超出边界时，坐标应该停留在边界上，而不是继续增长
-  const maxScrollLeft = Math.max(0, scrollEl.scrollWidth - scrollEl.clientWidth)
-  const maxScrollTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
-
-  // 最大坐标 = 可见区域大小 + 最大滚动距离
-  const maxX = scrollEl.clientWidth + maxScrollLeft
-  const maxY = scrollEl.clientHeight + maxScrollTop
-
-  const relativeX = Math.max(0, Math.min(rawX, maxX))
-  const relativeY = Math.max(0, Math.min(rawY, maxY))
-
-  // 存储坐标
-  dragSelection.value.currentX = relativeX
-  dragSelection.value.currentY = relativeY
+  // 使用composable更新拖拽选择
+  updateDragSelection(event, contentAreaRef.value)
 
   // 自动滚动检测
-  checkAutoScroll(event)
+  checkAutoScroll(event, contentAreaRef.value)
 
-  // 更新框选
-  updateDragSelection()
+  // 更新框选的项
+  updateSelectionFromDragBox()
 }
 
 function handleMouseUp() {
   if (dragSelection.value.isSelecting) {
     // 最后更新一次选择
-    updateDragSelection()
+    updateSelectionFromDragBox()
 
-    dragSelection.value.isSelecting = false
-    autoScroll.value.isScrolling = false
-
-    // 标记刚完成拖拽，防止 handleContentClick 清除选择
-    dragSelection.value.justFinished = true
-    setTimeout(() => {
-      dragSelection.value.justFinished = false
-    }, 100)
+    // 使用composable完成拖拽选择
+    finishDragSelection()
 
     // 设置焦点到最后选中的项
     if (selection.selectedItems.value.size > 0) {
@@ -574,149 +516,16 @@ function handleMouseUp() {
   }
 }
 
-// 检查是否需要自动滚动
-function checkAutoScroll(event: MouseEvent) {
-  if (!contentAreaRef.value) return
 
-  const rect = contentAreaRef.value.getBoundingClientRect()
-  const scrollEl = contentAreaRef.value
-  const threshold = 50
-  const baseScrollSpeed = 10
-
-  let dx = 0
-  let dy = 0
-
-  // 检查垂直滚动
-  if (event.clientY < rect.top) {
-    dy = -baseScrollSpeed
-  } else if (event.clientY < rect.top + threshold) {
-    const distance = event.clientY - rect.top
-    const ratio = 1 - distance / threshold
-    dy = -Math.max(3, baseScrollSpeed * ratio)
-  } else if (event.clientY > rect.bottom) {
-    dy = baseScrollSpeed
-  } else if (event.clientY > rect.bottom - threshold) {
-    const distance = rect.bottom - event.clientY
-    const ratio = 1 - distance / threshold
-    dy = Math.max(3, baseScrollSpeed * ratio)
-  }
-
-  // 检查水平滚动 - 只在确实有横向滚动空间时才启用
-  const hasHorizontalScroll = scrollEl.scrollWidth > scrollEl.clientWidth
-
-  if (hasHorizontalScroll) {
-    if (event.clientX < rect.left) {
-      dx = -baseScrollSpeed
-    } else if (event.clientX < rect.left + threshold) {
-      const distance = event.clientX - rect.left
-      const ratio = 1 - distance / threshold
-      dx = -Math.max(3, baseScrollSpeed * ratio)
-    } else if (event.clientX > rect.right) {
-      dx = baseScrollSpeed
-    } else if (event.clientX > rect.right - threshold) {
-      const distance = rect.right - event.clientX
-      const ratio = 1 - distance / threshold
-      dx = Math.max(3, baseScrollSpeed * ratio)
-    }
-  }
-
-  if (dx !== 0 || dy !== 0) {
-    if (!autoScroll.value.isScrolling) {
-      autoScroll.value.isScrolling = true
-      autoScroll.value.direction = { x: dx, y: dy }
-      startAutoScroll()
-    } else {
-      autoScroll.value.direction = { x: dx, y: dy }
-    }
-  } else {
-    autoScroll.value.isScrolling = false
-  }
-}
-
-// 开始自动滚动
-function startAutoScroll() {
-  let frameId: number | null = null
-
-  function scroll() {
-    if (!autoScroll.value.isScrolling || !contentAreaRef.value) {
-      if (frameId !== null) {
-        cancelAnimationFrame(frameId)
-        frameId = null
-      }
-      return
-    }
-
-    const scrollEl = contentAreaRef.value
-
-    // 计算新的滚动位置，并限制在有效范围内
-    const maxScrollLeft = Math.max(0, scrollEl.scrollWidth - scrollEl.clientWidth)
-    const maxScrollTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
-
-    let newScrollLeft = scrollEl.scrollLeft + autoScroll.value.direction.x
-    let newScrollTop = scrollEl.scrollTop + autoScroll.value.direction.y
-
-    // 限制滚动范围
-    newScrollLeft = Math.max(0, Math.min(newScrollLeft, maxScrollLeft))
-    newScrollTop = Math.max(0, Math.min(newScrollTop, maxScrollTop))
-
-    // 计算实际滚动距离
-    const actualDx = newScrollLeft - scrollEl.scrollLeft
-    const actualDy = newScrollTop - scrollEl.scrollTop
-
-    // 应用滚动
-    scrollEl.scrollLeft = newScrollLeft
-    scrollEl.scrollTop = newScrollTop
-
-    // 更新拖拽坐标（只在实际发生滚动时更新）
-    if (actualDx !== 0 || actualDy !== 0) {
-      dragSelection.value.currentX += actualDx
-      dragSelection.value.currentY += actualDy
-
-      // 确保坐标不超出内容范围
-      const maxX = scrollEl.clientWidth + maxScrollLeft
-      const maxY = scrollEl.clientHeight + maxScrollTop
-      dragSelection.value.currentX = Math.max(0, Math.min(dragSelection.value.currentX, maxX))
-      dragSelection.value.currentY = Math.max(0, Math.min(dragSelection.value.currentY, maxY))
-
-      updateDragSelection()
-    }
-
-    frameId = requestAnimationFrame(scroll)
-  }
-
-  frameId = requestAnimationFrame(scroll)
-}
-
-// 更新框选的项
-function updateDragSelection() {
+// 更新框选的项（使用composable的isIntersecting方法）
+function updateSelectionFromDragBox() {
   if (!contentAreaRef.value) return
 
   const items = contentAreaRef.value.querySelectorAll('.file-item, .list-item')
-  const selectionLeft = Math.min(dragSelection.value.startX, dragSelection.value.currentX)
-  const selectionTop = Math.min(dragSelection.value.startY, dragSelection.value.currentY)
-  const selectionRight = Math.max(dragSelection.value.startX, dragSelection.value.currentX)
-  const selectionBottom = Math.max(dragSelection.value.startY, dragSelection.value.currentY)
-
-  const scrollEl = contentAreaRef.value
-  const contentRect = scrollEl.getBoundingClientRect()
-
   const itemsInSelection = new Set<string>()
 
   items.forEach(item => {
-    const itemRect = item.getBoundingClientRect()
-    const itemLeft = itemRect.left - contentRect.left + scrollEl.scrollLeft
-    const itemTop = itemRect.top - contentRect.top + scrollEl.scrollTop
-    const itemRight = itemLeft + itemRect.width
-    const itemBottom = itemTop + itemRect.height
-
-    const intersects = !(
-      itemRight < selectionLeft ||
-      itemLeft > selectionRight ||
-      itemBottom < selectionTop ||
-      itemTop > selectionBottom
-    )
-
-    if (intersects) {
+    if (isIntersecting(item as HTMLElement, contentAreaRef.value!)) {
       const itemName = (item as HTMLElement).dataset.itemName
       if (itemName) {
         itemsInSelection.add(itemName)
@@ -839,29 +648,31 @@ function handleDragStart(event: DragEvent, item: FileItem) {
     selection.selectItem(item.name, index)
   }
 
-  // 设置拖动状态
-  dragState.value.isDragging = true
-  dragState.value.draggedItems = Array.from(selection.selectedItems.value)
-  dragState.value.sourcePane = props.paneId
+  const draggedItems = Array.from(selection.selectedItems.value)
+
+  // 使用composable设置拖动状态
+  startDrag(draggedItems, props.paneId)
 
   // 设置拖动数据
   const dragData = {
-    items: dragState.value.draggedItems,
+    items: draggedItems,
     sourcePane: props.paneId,
     sourcePath: currentPath.value
   }
   event.dataTransfer!.effectAllowed = 'move'
   event.dataTransfer!.setData('application/json', JSON.stringify(dragData))
 
+  // 使用composable创建自定义拖动预览
+  const preview = createDragPreview(draggedItems.length, draggedItems[0])
+  event.dataTransfer!.setDragImage(preview, 0, 0)
+  setTimeout(() => cleanupDragPreview(preview), 0)
+
   // 隐藏tooltip
   tooltipRef.value?.hide()
 }
 
 function handleDragEnd() {
-  dragState.value.isDragging = false
-  dragState.value.dropTarget = null
-  dragState.value.sourcePane = null
-  dragState.value.isPaneDragOver = false
+  resetDragState()
 }
 
 function handleDragOver(event: DragEvent, item: FileItem) {
@@ -873,7 +684,7 @@ function handleDragOver(event: DragEvent, item: FileItem) {
 
   event.preventDefault()
   event.dataTransfer!.dropEffect = 'move'
-  dragState.value.dropTarget = item.name
+  setDropTarget(item.name)
 }
 
 function handleDragLeave(event: DragEvent) {
@@ -882,7 +693,7 @@ function handleDragLeave(event: DragEvent) {
 
   // 只有真正离开元素时才清除
   if (!target.contains(relatedTarget)) {
-    dragState.value.dropTarget = null
+    setDropTarget(null)
   }
 }
 
@@ -895,24 +706,35 @@ function handleDrop(event: DragEvent, targetItem: FileItem) {
   try {
     const dragData = JSON.parse(event.dataTransfer!.getData('application/json'))
 
-    // 显示移动操作（实际实现需要状态管理）
-    const itemNames = dragData.items.join(', ')
-    console.log(`移动文件: ${itemNames} 到 ${targetItem.name}`)
-    alert(`已移动 ${dragData.items.length} 个项目到 "${targetItem.name}"`)
+    // 显示移动操作日志
+    const itemCount = dragData.items.length
+    const itemLabel = itemCount === 1 ? dragData.items[0] : `${itemCount} 个项目`
 
-    // TODO: 实现实际的文件移动逻辑
-    // 这需要:
-    // 1. 更新mockData或使用真实的文件系统API
-    // 2. 从源位置移除文件
-    // 3. 添加到目标位置
-    // 4. 刷新视图
+    console.log(`[文件操作] 移动 ${itemLabel} 到文件夹 "${targetItem.name}"`, {
+      source: dragData.sourcePane,
+      target: props.paneId,
+      items: dragData.items,
+      targetFolder: targetItem.name
+    })
+
+    // 执行文件移动（使用utils）
+    const targetPath = [...currentPath.value, targetItem.name]
+    const success = moveItems(mockFolderStructure, dragData.items, dragData.sourcePath, targetPath)
+
+    if (success) {
+      // 清除选择
+      selection.clearSelection()
+
+      // 触发视图更新
+      nextTick()
+    }
 
   } catch (e) {
-    console.error('Drop failed:', e)
+    console.error('[文件操作] 拖放失败:', e)
   }
 
-  dragState.value.isDragging = false
-  dragState.value.dropTarget = null
+  // 清除所有拖拽状态（包括绿框）
+  resetDragState()
 }
 
 // Pane-level drop handlers (for dropping into empty space or other pane)
@@ -928,7 +750,7 @@ function handlePaneDragOver(event: DragEvent) {
     if (data) {
       event.preventDefault()
       event.dataTransfer!.dropEffect = 'move'
-      dragState.value.isPaneDragOver = true
+      setPaneDragOver(true)
     }
   } catch (e) {
     // Ignore
@@ -941,7 +763,7 @@ function handlePaneDragLeave(event: DragEvent) {
 
   // 只有真正离开pane时才清除
   if (!contentAreaRef.value?.contains(relatedTarget)) {
-    dragState.value.isPaneDragOver = false
+    setPaneDragOver(false)
   }
 }
 
@@ -959,22 +781,39 @@ function handlePaneDrop(event: DragEvent) {
 
     // 拖到当前面板的空白区域 = 移动到当前文件夹
     const currentFolderName = currentPath.value[currentPath.value.length - 1]
-    console.log(`移动文件: ${dragData.items.join(', ')} 到当前文件夹 ${currentFolderName}`)
+    const itemCount = dragData.items.length
+    const itemLabel = itemCount === 1 ? dragData.items[0] : `${itemCount} 个项目`
 
     if (dragData.sourcePane !== props.paneId) {
-      alert(`已从${dragData.sourcePane === 'left' ? '左' : '右'}面板移动 ${dragData.items.length} 个项目到${props.paneId === 'left' ? '左' : '右'}面板的 "${currentFolderName}"`)
+      // 跨面板移动
+      const sourceLabel = dragData.sourcePane === 'left' ? '左' : '右'
+      const targetLabel = props.paneId === 'left' ? '左' : '右'
+
+      console.log(`[文件操作] 从${sourceLabel}面板移动 ${itemLabel} 到${targetLabel}面板的 "${currentFolderName}"`, {
+        source: dragData.sourcePane,
+        target: props.paneId,
+        items: dragData.items,
+        targetPath: currentPath.value
+      })
+
+      // 执行跨面板移动（使用utils）
+      const success = moveItems(mockFolderStructure, dragData.items, dragData.sourcePath, currentPath.value)
+      if (success) {
+        selection.clearSelection()
+        nextTick()
+      }
     } else {
-      alert(`在当前文件夹内操作`)
+      // 同面板内移动（相当于什么都不做）
+      console.log(`[文件操作] 在当前文件夹内操作 ${itemLabel}（无变化）`)
+      selection.clearSelection()
     }
 
-    // TODO: 实现实际的文件移动逻辑
-
   } catch (e) {
-    console.error('Pane drop failed:', e)
+    console.error('[文件操作] 面板拖放失败:', e)
   }
 
-  dragState.value.isPaneDragOver = false
-  dragState.value.isDragging = false
+  // 清除所有拖拽状态（包括绿框）
+  resetDragState()
 }
 
 // 计算Grid列数
@@ -1382,13 +1221,14 @@ useKeyboardNav({
   padding: 16px;
   overflow: auto;
   position: relative;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
 }
 
 .content-area.pane-drag-over {
-  background: #f0fdf4;
-  outline: 2px dashed #10b981;
-  outline-offset: -8px;
+  background: rgba(240, 253, 244, 0.3);
+  padding-bottom: 24px;
+  border: 2px dashed #10b981;
+  border-radius: 4px;
 }
 
 /* Grid View */
@@ -1444,13 +1284,15 @@ useKeyboardNav({
 .file-item.drop-target {
   border-color: #10b981;
   background: #f0fdf4;
+  transition: all 0.15s;
 }
 
 .file-item.drag-over {
   border-color: #10b981;
-  background: #d1fae5;
+  background: rgba(209, 250, 229, 0.5);
   transform: scale(1.02);
   box-shadow: 0 0 0 2px #10b981;
+  z-index: 1;
 }
 
 .file-icon {
@@ -1517,13 +1359,15 @@ useKeyboardNav({
 
 .list-item.drop-target {
   background: #f0fdf4;
-  border-left: 3px solid #10b981;
+  border-left: 4px solid #10b981;
+  transition: all 0.15s;
 }
 
 .list-item.drag-over {
-  background: #d1fae5;
+  background: rgba(209, 250, 229, 0.5);
   border-left: 3px solid #10b981;
   box-shadow: 0 0 0 1px #10b981;
+  transform: translateX(2px);
 }
 
 .list-icon {

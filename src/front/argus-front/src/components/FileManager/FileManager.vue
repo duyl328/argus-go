@@ -16,27 +16,27 @@
         <!-- View Controls -->
         <div class="view-controls">
           <button
-            :class="['btn-view', { active: viewMode === 'grid' }]"
-            @click="viewMode = 'grid'"
+            :class="['btn-view', { active: activeConfig.viewMode === 'grid' }]"
+            @click="updateActiveViewMode('grid')"
           >
             网格
           </button>
           <button
-            :class="['btn-view', { active: viewMode === 'list' }]"
-            @click="viewMode = 'list'"
+            :class="['btn-view', { active: activeConfig.viewMode === 'list' }]"
+            @click="updateActiveViewMode('list')"
           >
             列表
           </button>
         </div>
 
         <!-- Thumbnail Size -->
-        <div v-if="viewMode === 'grid'" class="thumbnail-controls">
+        <div v-if="activeConfig.viewMode === 'grid'" class="thumbnail-controls">
           <span class="label">大小:</span>
           <button
             v-for="size in (['small', 'medium', 'large'] as ThumbnailSize[])"
             :key="size"
-            :class="['btn-size', { active: thumbnailSize === size }]"
-            @click="thumbnailSize = size"
+            :class="['btn-size', { active: activeConfig.thumbnailSize === size }]"
+            @click="updateActiveThumbnailSize(size)"
           >
             {{ size === 'small' ? '小' : size === 'medium' ? '中' : '大' }}
           </button>
@@ -73,8 +73,8 @@
     <div :class="['main-content', `layout-${layoutMode}`]">
       <FilePane
         pane-id="left"
-        :view-mode="viewMode"
-        :thumbnail-size="thumbnailSize"
+        :view-mode="paneConfigs.left.viewMode"
+        :thumbnail-size="paneConfigs.left.thumbnailSize"
         :is-active="activePane === 'left'"
         @activate="activePane = 'left'"
       />
@@ -88,8 +88,8 @@
       <FilePane
         v-if="layoutMode === 'horizontal' || layoutMode === 'vertical'"
         pane-id="right"
-        :view-mode="viewMode"
-        :thumbnail-size="thumbnailSize"
+        :view-mode="paneConfigs.right.viewMode"
+        :thumbnail-size="paneConfigs.right.thumbnailSize"
         :is-active="activePane === 'right'"
         @activate="activePane = 'right'"
       />
@@ -98,14 +98,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import FilePane from './FilePane.vue'
 import type { ViewMode, ThumbnailSize, LayoutMode, PaneId } from './types'
 
-const viewMode = ref<ViewMode>('grid')
-const thumbnailSize = ref<ThumbnailSize>('medium')
+// 每个面板的独立配置
+const paneConfigs = ref({
+  left: {
+    viewMode: 'grid' as ViewMode,
+    thumbnailSize: 'medium' as ThumbnailSize
+  },
+  right: {
+    viewMode: 'grid' as ViewMode,
+    thumbnailSize: 'medium' as ThumbnailSize
+  }
+})
+
 const layoutMode = ref<LayoutMode>('single')
 const activePane = ref<PaneId>('left')
+
+// 当前活动面板的配置（用于工具栏显示）
+const activeConfig = computed(() => paneConfigs.value[activePane.value])
+
+// 更新当前活动面板的配置
+function updateActiveViewMode(mode: ViewMode) {
+  paneConfigs.value[activePane.value].viewMode = mode
+}
+
+function updateActiveThumbnailSize(size: ThumbnailSize) {
+  paneConfigs.value[activePane.value].thumbnailSize = size
+}
 
 // 分隔器拖拽
 const isDraggingSplitter = ref(false)
