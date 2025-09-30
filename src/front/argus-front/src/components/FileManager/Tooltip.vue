@@ -18,7 +18,7 @@ const content = ref('')
 const position = ref({ x: 0, y: 0 })
 const timeout = ref<number>()
 
-function show(text: string, x: number, y: number, delay = 500) {
+function show(text: string, x: number, y: number, delay = 1000) {
   clearTimeout(timeout.value)
 
   timeout.value = window.setTimeout(() => {
@@ -42,16 +42,17 @@ defineExpose({
 <style scoped>
 .tooltip {
   position: fixed;
-  background: rgba(0, 0, 0, 0.85);
-  color: white;
-  padding: 6px 10px;
-  border-radius: 6px;
+  background: white;
+  color: #374151;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
   font-size: 12px;
   pointer-events: none;
   z-index: 100;
-  white-space: nowrap;
-  max-width: 300px;
-  word-wrap: break-word;
-  white-space: normal;
+  white-space: pre-line;
+  max-width: 280px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  line-height: 1.5;
 }
 </style>

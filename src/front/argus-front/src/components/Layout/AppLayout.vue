@@ -298,15 +298,13 @@ const handleMenuSelect = (key: string) => {
 
 .layout-content {
   height: 100%;
-  overflow: auto;
+  overflow: hidden;
   flex: 1;
   background-color: var(--content-bg);
 }
 
 .content-wrapper {
-  padding: 24px;
   height: 100%;
-  min-height: calc(100vh - 64px);
   box-sizing: border-box;
 }
 

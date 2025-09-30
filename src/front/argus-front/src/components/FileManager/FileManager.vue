@@ -54,9 +54,16 @@
           <button
             :class="['btn-layout', { active: layoutMode === 'horizontal' }]"
             @click="layoutMode = 'horizontal'"
-            title="横向双面板"
+            title="左右双面板"
           >
             ▭
+          </button>
+          <button
+            :class="['btn-layout', { active: layoutMode === 'vertical' }]"
+            @click="layoutMode = 'vertical'"
+            title="上下双面板"
+          >
+            ▯
           </button>
         </div>
       </div>
@@ -73,13 +80,13 @@
       />
 
       <div
-        v-if="layoutMode === 'horizontal'"
-        class="splitter"
+        v-if="layoutMode === 'horizontal' || layoutMode === 'vertical'"
+        :class="['splitter', layoutMode === 'vertical' ? 'splitter-vertical' : '']"
         @mousedown="handleSplitterMouseDown"
       ></div>
 
       <FilePane
-        v-if="layoutMode === 'horizontal'"
+        v-if="layoutMode === 'horizontal' || layoutMode === 'vertical'"
         pane-id="right"
         :view-mode="viewMode"
         :thumbnail-size="thumbnailSize"
@@ -105,7 +112,8 @@ const isDraggingSplitter = ref(false)
 
 function handleSplitterMouseDown(event: MouseEvent) {
   isDraggingSplitter.value = true
-  document.body.style.cursor = 'col-resize'
+  const isVertical = layoutMode.value === 'vertical'
+  document.body.style.cursor = isVertical ? 'row-resize' : 'col-resize'
   document.body.style.userSelect = 'none'
 
   const mainContent = document.querySelector('.main-content') as HTMLElement
@@ -115,11 +123,21 @@ function handleSplitterMouseDown(event: MouseEvent) {
     if (!isDraggingSplitter.value) return
 
     const rect = mainContent.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const percentage = (x / rect.width) * 100
 
-    if (percentage > 20 && percentage < 80) {
-      mainContent.style.gridTemplateColumns = `${percentage}% 4px 1fr`
+    if (isVertical) {
+      const y = e.clientY - rect.top
+      const percentage = (y / rect.height) * 100
+
+      if (percentage > 20 && percentage < 80) {
+        mainContent.style.gridTemplateRows = `${percentage}% 4px 1fr`
+      }
+    } else {
+      const x = e.clientX - rect.left
+      const percentage = (x / rect.width) * 100
+
+      if (percentage > 20 && percentage < 80) {
+        mainContent.style.gridTemplateColumns = `${percentage}% 4px 1fr`
+      }
     }
   }
 
@@ -140,7 +158,7 @@ function handleSplitterMouseDown(event: MouseEvent) {
 .file-manager {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   background: #f9fafb;
 }
 
@@ -235,9 +253,18 @@ function handleSplitterMouseDown(event: MouseEvent) {
   grid-template-columns: 1fr 4px 1fr;
 }
 
+.main-content.layout-vertical {
+  display: grid;
+  grid-template-rows: 1fr 4px 1fr;
+}
+
 .splitter {
   background: #d1d5db;
   cursor: col-resize;
+}
+
+.splitter.splitter-vertical {
+  cursor: row-resize;
 }
 
 .splitter:hover {

@@ -70,7 +70,7 @@
       @drop="handlePaneDrop"
     >
       <!-- Grid View -->
-      <div v-if="viewMode === 'grid'" :class="['file-grid', `grid-${thumbnailSize}`]">
+      <div v-if="viewMode === 'grid'" :class="['file-grid', `grid-${thumbnailSize}`]" :style="gridItemSize">
         <div
           v-for="(item, index) in visibleItems"
           :key="item.name"
@@ -211,6 +211,7 @@ const selection = useFileSelection()
 const searchQuery = ref('')
 const pathEditMode = ref(false)
 const pathEditValue = ref('')
+const zoomLevel = ref(100) // 缩放级别：50-200%
 
 // Context Menu state
 const contextMenu = ref({
@@ -237,7 +238,8 @@ const dragSelection = ref({
   currentX: 0,
   currentY: 0,
   initialSelections: new Set<string>(),
-  ctrlKey: false
+  ctrlKey: false,
+  justFinished: false
 })
 
 // Auto scroll state
@@ -486,12 +488,27 @@ function handleMouseDown(event: MouseEvent) {
     currentX: event.clientX - rect.left + scrollEl.scrollLeft,
     currentY: event.clientY - rect.top + scrollEl.scrollTop,
     initialSelections: new Set(selection.selectedItems.value),
-    ctrlKey: event.ctrlKey || event.metaKey
+    ctrlKey: event.ctrlKey || event.metaKey,
+    justFinished: false
   }
 
   if (!dragSelection.value.ctrlKey) {
     selection.clearSelection()
   }
+
+  // 在 document 级别监听 mousemove 和 mouseup
+  const onDocumentMouseMove = (e: MouseEvent) => {
+    handleMouseMove(e)
+  }
+
+  const onDocumentMouseUp = (e: MouseEvent) => {
+    handleMouseUp()
+    document.removeEventListener('mousemove', onDocumentMouseMove)
+    document.removeEventListener('mouseup', onDocumentMouseUp)
+  }
+
+  document.addEventListener('mousemove', onDocumentMouseMove)
+  document.addEventListener('mouseup', onDocumentMouseUp)
 
   event.preventDefault()
 }
@@ -503,8 +520,27 @@ function handleMouseMove(event: MouseEvent) {
   if (!rect) return
 
   const scrollEl = contentAreaRef.value!
-  dragSelection.value.currentX = event.clientX - rect.left + scrollEl.scrollLeft
-  dragSelection.value.currentY = event.clientY - rect.top + scrollEl.scrollTop
+
+  // 计算鼠标相对于内容区域的位置（包含滚动偏移）
+  // 鼠标在视口中的位置 + 滚动偏移 = 在文档中的绝对位置
+  const rawX = event.clientX - rect.left + scrollEl.scrollLeft
+  const rawY = event.clientY - rect.top + scrollEl.scrollTop
+
+  // 限制坐标在合理范围内
+  // 当鼠标超出边界时，坐标应该停留在边界上，而不是继续增长
+  const maxScrollLeft = Math.max(0, scrollEl.scrollWidth - scrollEl.clientWidth)
+  const maxScrollTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
+
+  // 最大坐标 = 可见区域大小 + 最大滚动距离
+  const maxX = scrollEl.clientWidth + maxScrollLeft
+  const maxY = scrollEl.clientHeight + maxScrollTop
+
+  const relativeX = Math.max(0, Math.min(rawX, maxX))
+  const relativeY = Math.max(0, Math.min(rawY, maxY))
+
+  // 存储坐标
+  dragSelection.value.currentX = relativeX
+  dragSelection.value.currentY = relativeY
 
   // 自动滚动检测
   checkAutoScroll(event)
@@ -520,6 +556,12 @@ function handleMouseUp() {
 
     dragSelection.value.isSelecting = false
     autoScroll.value.isScrolling = false
+
+    // 标记刚完成拖拽，防止 handleContentClick 清除选择
+    dragSelection.value.justFinished = true
+    setTimeout(() => {
+      dragSelection.value.justFinished = false
+    }, 100)
 
     // 设置焦点到最后选中的项
     if (selection.selectedItems.value.size > 0) {
@@ -537,21 +579,45 @@ function checkAutoScroll(event: MouseEvent) {
   if (!contentAreaRef.value) return
 
   const rect = contentAreaRef.value.getBoundingClientRect()
+  const scrollEl = contentAreaRef.value
   const threshold = 50
+  const baseScrollSpeed = 10
 
   let dx = 0
   let dy = 0
 
-  if (event.clientY < rect.top + threshold) {
-    dy = -5
+  // 检查垂直滚动
+  if (event.clientY < rect.top) {
+    dy = -baseScrollSpeed
+  } else if (event.clientY < rect.top + threshold) {
+    const distance = event.clientY - rect.top
+    const ratio = 1 - distance / threshold
+    dy = -Math.max(3, baseScrollSpeed * ratio)
+  } else if (event.clientY > rect.bottom) {
+    dy = baseScrollSpeed
   } else if (event.clientY > rect.bottom - threshold) {
-    dy = 5
+    const distance = rect.bottom - event.clientY
+    const ratio = 1 - distance / threshold
+    dy = Math.max(3, baseScrollSpeed * ratio)
   }
 
-  if (event.clientX < rect.left + threshold) {
-    dx = -5
-  } else if (event.clientX > rect.right - threshold) {
-    dx = 5
+  // 检查水平滚动 - 只在确实有横向滚动空间时才启用
+  const hasHorizontalScroll = scrollEl.scrollWidth > scrollEl.clientWidth
+
+  if (hasHorizontalScroll) {
+    if (event.clientX < rect.left) {
+      dx = -baseScrollSpeed
+    } else if (event.clientX < rect.left + threshold) {
+      const distance = event.clientX - rect.left
+      const ratio = 1 - distance / threshold
+      dx = -Math.max(3, baseScrollSpeed * ratio)
+    } else if (event.clientX > rect.right) {
+      dx = baseScrollSpeed
+    } else if (event.clientX > rect.right - threshold) {
+      const distance = rect.right - event.clientX
+      const ratio = 1 - distance / threshold
+      dx = Math.max(3, baseScrollSpeed * ratio)
+    }
   }
 
   if (dx !== 0 || dy !== 0) {
@@ -569,23 +635,56 @@ function checkAutoScroll(event: MouseEvent) {
 
 // 开始自动滚动
 function startAutoScroll() {
+  let frameId: number | null = null
+
   function scroll() {
-    if (!autoScroll.value.isScrolling || !contentAreaRef.value) return
+    if (!autoScroll.value.isScrolling || !contentAreaRef.value) {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId)
+        frameId = null
+      }
+      return
+    }
 
-    contentAreaRef.value.scrollLeft += autoScroll.value.direction.x
-    contentAreaRef.value.scrollTop += autoScroll.value.direction.y
+    const scrollEl = contentAreaRef.value
 
-    // 更新拖拽坐标
-    const rect = contentAreaRef.value.getBoundingClientRect()
-    dragSelection.value.currentX += autoScroll.value.direction.x
-    dragSelection.value.currentY += autoScroll.value.direction.y
+    // 计算新的滚动位置，并限制在有效范围内
+    const maxScrollLeft = Math.max(0, scrollEl.scrollWidth - scrollEl.clientWidth)
+    const maxScrollTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
 
-    updateDragSelection()
+    let newScrollLeft = scrollEl.scrollLeft + autoScroll.value.direction.x
+    let newScrollTop = scrollEl.scrollTop + autoScroll.value.direction.y
 
-    requestAnimationFrame(scroll)
+    // 限制滚动范围
+    newScrollLeft = Math.max(0, Math.min(newScrollLeft, maxScrollLeft))
+    newScrollTop = Math.max(0, Math.min(newScrollTop, maxScrollTop))
+
+    // 计算实际滚动距离
+    const actualDx = newScrollLeft - scrollEl.scrollLeft
+    const actualDy = newScrollTop - scrollEl.scrollTop
+
+    // 应用滚动
+    scrollEl.scrollLeft = newScrollLeft
+    scrollEl.scrollTop = newScrollTop
+
+    // 更新拖拽坐标（只在实际发生滚动时更新）
+    if (actualDx !== 0 || actualDy !== 0) {
+      dragSelection.value.currentX += actualDx
+      dragSelection.value.currentY += actualDy
+
+      // 确保坐标不超出内容范围
+      const maxX = scrollEl.clientWidth + maxScrollLeft
+      const maxY = scrollEl.clientHeight + maxScrollTop
+      dragSelection.value.currentX = Math.max(0, Math.min(dragSelection.value.currentX, maxX))
+      dragSelection.value.currentY = Math.max(0, Math.min(dragSelection.value.currentY, maxY))
+
+      updateDragSelection()
+    }
+
+    frameId = requestAnimationFrame(scroll)
   }
 
-  requestAnimationFrame(scroll)
+  frameId = requestAnimationFrame(scroll)
 }
 
 // 更新框选的项
@@ -645,6 +744,11 @@ function updateDragSelection() {
 }
 
 function handleContentClick(event: MouseEvent) {
+  // 如果刚完成拖拽选择，不要清除选择
+  if (dragSelection.value.justFinished) {
+    return
+  }
+
   const target = event.target as HTMLElement
   if (!target.closest('.file-item') && !target.closest('.list-item')) {
     if (!event.ctrlKey) {
@@ -712,8 +816,14 @@ function handleContextMenuAction(action: string, params?: any) {
 // Tooltip 处理
 function handleItemMouseEnter(event: MouseEvent, item: FileItem) {
   if (dragState.value.isDragging) return
-  const tooltip = `名称: ${item.name}\n类型: ${item.type === 'folder' ? '文件夹' : '文件'}\n${item.size ? '大小: ' + item.size : ''}\n${item.date ? '日期: ' + item.date : ''}`
-  tooltipRef.value?.show(tooltip.trim(), event.clientX, event.clientY)
+
+  const lines: string[] = []
+  lines.push(`类型: ${item.type === 'folder' ? '文件夹' : '文件'}`)
+  if (item.size) lines.push(`大小: ${item.size}`)
+  if (item.date) lines.push(`修改日期: ${item.date}`)
+
+  const tooltip = lines.join('\n')
+  tooltipRef.value?.show(tooltip, event.clientX, event.clientY)
 }
 
 function handleItemMouseLeave() {
@@ -893,22 +1003,56 @@ function getGridColumns(): number {
   return 1
 }
 
+// 处理Ctrl+滚轮缩放
+function handleWheel(event: WheelEvent) {
+  if (!event.ctrlKey) return
+
+  event.preventDefault()
+
+  const delta = event.deltaY > 0 ? -10 : 10
+  const newZoom = Math.max(50, Math.min(200, zoomLevel.value + delta))
+  zoomLevel.value = newZoom
+}
+
+// 计算动态网格大小
+const gridItemSize = computed(() => {
+  if (props.viewMode !== 'grid') return {}
+
+  const baseSize = props.thumbnailSize === 'small' ? 80 :
+                   props.thumbnailSize === 'medium' ? 100 : 130
+
+  const size = Math.round(baseSize * (zoomLevel.value / 100))
+
+  return {
+    '--grid-item-size': `${size}px`
+  }
+})
+
 // 监听搜索变化清除选择
 watch(searchQuery, () => {
   selection.clearSelection()
 })
 
-// 关闭breadcrumb dropdown
+// 关闭breadcrumb dropdown 和 添加滚轮监听
 onMounted(() => {
-  document.addEventListener('click', () => {
+  const closeDropdown = () => {
     breadcrumbDropdown.value.visible = false
-  })
+  }
+  document.addEventListener('click', closeDropdown)
+
+  if (contentAreaRef.value) {
+    contentAreaRef.value.addEventListener('wheel', handleWheel, { passive: false })
+  }
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', () => {
     breadcrumbDropdown.value.visible = false
   })
+
+  if (contentAreaRef.value) {
+    contentAreaRef.value.removeEventListener('wheel', handleWheel)
+  }
 })
 
 // 键盘导航
@@ -972,6 +1116,8 @@ useKeyboardNav({
   flex-direction: column;
   background: white;
   transition: opacity 0.15s;
+  height: 100%;
+  overflow: hidden;
 }
 
 .file-pane.inactive {
@@ -1232,6 +1378,7 @@ useKeyboardNav({
 /* Content Area */
 .content-area {
   flex: 1;
+  min-height: 0;
   padding: 16px;
   overflow: auto;
   position: relative;
@@ -1247,44 +1394,46 @@ useKeyboardNav({
 /* Grid View */
 .file-grid {
   display: grid;
-  gap: 16px;
+  gap: 8px;
+  --grid-item-size: 100px; /* 默认值，会被动态覆盖 */
 }
 
 .file-grid.grid-small {
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--grid-item-size, 80px), 1fr));
 }
 
 .file-grid.grid-medium {
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--grid-item-size, 100px), 1fr));
 }
 
 .file-grid.grid-large {
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--grid-item-size, 130px), 1fr));
 }
 
 .file-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px;
+  justify-content: center;
+  padding: 8px;
   background: white;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
   user-select: none;
+  aspect-ratio: 1 / 1;
+  position: relative;
 }
 
 .file-item:hover {
-  background: #f9fafb;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  background: #f3f4f6;
+  border-color: #d1d5db;
 }
 
 .file-item.selected {
   background: #dbeafe;
   border-color: #3b82f6;
-  box-shadow: 0 0 0 1px #3b82f6;
 }
 
 .file-item.focused {
@@ -1305,16 +1454,23 @@ useKeyboardNav({
 }
 
 .file-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
+  font-size: 40px;
+  margin-bottom: 4px;
+  flex-shrink: 0;
 }
 
 .file-name {
-  font-size: 13px;
+  font-size: 12px;
   text-align: center;
   word-break: break-word;
-  font-weight: 500;
   color: #374151;
+  line-height: 1.3;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .file-name :deep(mark) {
@@ -1326,36 +1482,37 @@ useKeyboardNav({
 }
 
 .file-size {
-  font-size: 11px;
-  color: #9ca3af;
-  margin-top: 4px;
+  display: none;
 }
 
 /* List View */
 .file-list {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
 }
 
 .list-item {
   display: grid;
-  grid-template-columns: 40px 1fr 100px 120px;
+  grid-template-columns: 32px 1fr 100px 140px;
   align-items: center;
-  padding: 10px 12px;
+  padding: 4px 8px;
   background: white;
-  border-bottom: 1px solid #f3f4f6;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.1s;
   user-select: none;
+  min-height: 32px;
 }
 
 .list-item:hover {
-  background: #f9fafb;
+  background: #f3f4f6;
+  border-color: #e5e7eb;
 }
 
 .list-item.selected {
-  background: #dbeafe;
+  background: #cce8ff;
+  border-color: #99d1ff;
 }
 
 .list-item.drop-target {
@@ -1370,12 +1527,15 @@ useKeyboardNav({
 }
 
 .list-icon {
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .list-name {
-  font-size: 14px;
-  color: #374151;
+  font-size: 13px;
+  color: #1f2937;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .list-name :deep(mark) {
@@ -1387,7 +1547,7 @@ useKeyboardNav({
 }
 
 .list-size, .list-date {
-  font-size: 13px;
+  font-size: 12px;
   color: #6b7280;
 }
 
