@@ -72,6 +72,7 @@
     <!-- Main Content -->
     <div :class="['main-content', `layout-${layoutMode}`]">
       <FilePane
+        ref="leftPaneRef"
         pane-id="left"
         :view-mode="paneConfigs.left.viewMode"
         :thumbnail-size="paneConfigs.left.thumbnailSize"
@@ -87,6 +88,7 @@
 
       <FilePane
         v-if="layoutMode === 'horizontal' || layoutMode === 'vertical'"
+        ref="rightPaneRef"
         pane-id="right"
         :view-mode="paneConfigs.right.viewMode"
         :thumbnail-size="paneConfigs.right.thumbnailSize"
@@ -101,6 +103,10 @@
 import { ref, computed } from 'vue'
 import FilePane from './FilePane.vue'
 import type { ViewMode, ThumbnailSize, LayoutMode, PaneId } from './types'
+
+// FilePane refs
+const leftPaneRef = ref<InstanceType<typeof FilePane>>()
+const rightPaneRef = ref<InstanceType<typeof FilePane>>()
 
 // 每个面板的独立配置
 const paneConfigs = ref({
@@ -174,6 +180,26 @@ function handleSplitterMouseDown(event: MouseEvent) {
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
 }
+
+// 暴露方法给父组件调用
+function goBack() {
+  const activePaneRef = activePane.value === 'left' ? leftPaneRef.value : rightPaneRef.value
+  if (activePaneRef && typeof activePaneRef.goBack === 'function') {
+    activePaneRef.goBack()
+  }
+}
+
+function goForward() {
+  const activePaneRef = activePane.value === 'left' ? leftPaneRef.value : rightPaneRef.value
+  if (activePaneRef && typeof activePaneRef.goForward === 'function') {
+    activePaneRef.goForward()
+  }
+}
+
+defineExpose({
+  goBack,
+  goForward
+})
 </script>
 
 <style scoped>

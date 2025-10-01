@@ -1,5 +1,5 @@
 <template>
-  <div :class="['file-pane', { active: isActive, inactive: !isActive }]" @click="$emit('activate')">
+  <div :class="['file-pane', { active: isActive, inactive: !isActive }]" @click="$emit('activate')" @mousedown="handlePaneMouseDown">
     <!-- Top indicator -->
     <div v-if="isActive" class="active-indicator"></div>
 
@@ -218,6 +218,10 @@ const pathEditMode = ref(false)
 const pathEditValue = ref('')
 const zoomLevel = ref(100) // 缩放级别：50-200%
 
+// History management
+const history = ref<string[][]>([['Home']]) // 存储路径历史
+const historyIndex = ref(0) // 当前历史位置
+
 // Context Menu state
 const contextMenu = ref({
   visible: false,
@@ -280,9 +284,43 @@ function highlightText(text: string): string {
 
 function navigateToIndex(index: number) {
   currentPath.value = currentPath.value.slice(0, index + 1)
+  addToHistory(currentPath.value)
   selection.clearSelection()
   searchQuery.value = ''
   breadcrumbDropdown.value.visible = false
+}
+
+// History navigation functions
+function addToHistory(path: string[]) {
+  // 检查新路径是否与当前历史位置的路径相同
+  const currentHistoryPath = history.value[historyIndex.value]
+  if (currentHistoryPath && JSON.stringify(currentHistoryPath) === JSON.stringify(path)) {
+    return // 路径相同，不添加重复历史
+  }
+
+  // 删除当前位置之后的所有历史（用户在历史中间位置进行了新的导航）
+  history.value = history.value.slice(0, historyIndex.value + 1)
+  // 添加新路径
+  history.value.push([...path])
+  historyIndex.value = history.value.length - 1
+}
+
+function goBack() {
+  if (historyIndex.value > 0) {
+    historyIndex.value--
+    currentPath.value = [...history.value[historyIndex.value]]
+    selection.clearSelection()
+    searchQuery.value = ''
+  }
+}
+
+function goForward() {
+  if (historyIndex.value < history.value.length - 1) {
+    historyIndex.value++
+    currentPath.value = [...history.value[historyIndex.value]]
+    selection.clearSelection()
+    searchQuery.value = ''
+  }
 }
 
 // Breadcrumb dropdown
@@ -336,6 +374,7 @@ function navigateToBreadcrumbFolder(folderName: string) {
   // 导航到选中的文件夹
   const newPath = [...currentPath.value.slice(0, index + 1), folderName]
   currentPath.value = newPath
+  addToHistory(currentPath.value)
   selection.clearSelection()
   searchQuery.value = ''
   breadcrumbDropdown.value.visible = false
@@ -385,6 +424,7 @@ function applyPathEdit() {
 
   // 应用路径
   currentPath.value = segments
+  addToHistory(currentPath.value)
   selection.clearSelection()
   searchQuery.value = ''
   pathEditMode.value = false
@@ -397,6 +437,7 @@ function cancelPathEdit() {
 
 function navigateToFolder(folderName: string) {
   currentPath.value.push(folderName)
+  addToHistory(currentPath.value)
   selection.clearSelection()
   searchQuery.value = ''
 }
@@ -430,6 +471,11 @@ function handleItemDoubleClick(item: FileItem) {
   if (item.type === 'folder') {
     navigateToFolder(item.name)
   }
+}
+
+// 面板级别的鼠标按下处理（已由 FieldView 统一处理，此处仅作为备用）
+function handlePaneMouseDown(event: MouseEvent) {
+  // 鼠标侧键由 FieldView 全局处理，这里不再需要处理
 }
 
 function handleMouseDown(event: MouseEvent) {
@@ -945,6 +991,12 @@ useKeyboardNav({
     selection.selectAll(visibleItems.value)
   },
   getGridColumns
+})
+
+// 暴露方法给父组件
+defineExpose({
+  goBack,
+  goForward
 })
 </script>
 
