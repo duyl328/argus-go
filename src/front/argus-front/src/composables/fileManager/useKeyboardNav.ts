@@ -10,7 +10,7 @@ interface UseKeyboardNavOptions {
   selectedItems: Ref<Set<string>>
   onNavigate: (newIndex: number, event: KeyboardEvent) => void
   onEnter: () => void
-  onSpace: () => void
+  onSpace: (event: KeyboardEvent) => void
   onSelectAll: () => void
   getGridColumns: () => number
 }
@@ -100,7 +100,7 @@ export function useKeyboardNav(options: UseKeyboardNavOptions) {
 
       case ' ':
         event.preventDefault()
-        onSpace()
+        onSpace(event)
         break
 
       case 'a':

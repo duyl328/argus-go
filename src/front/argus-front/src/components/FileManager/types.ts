@@ -17,6 +17,20 @@ export type ThumbnailSize = 'small' | 'medium' | 'large'
 export type LayoutMode = 'single' | 'horizontal' | 'vertical'
 export type PaneId = 'left' | 'right'
 
+// 排序和筛选相关类型
+export type SortField = 'name' | 'extension' | 'date' | 'size' | 'type'
+export type SortOrder = 'asc' | 'desc'
+
+export interface SortOptions {
+  field: SortField
+  order: SortOrder
+}
+
+export interface FilterOptions {
+  nameQuery: string
+  fileType: 'all' | 'photo' | 'video' | 'folder' | 'file'
+}
+
 export interface SelectionState {
   selectedItems: Set<string>
   focusedItem: { name: string; index: number } | null

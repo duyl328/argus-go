@@ -76,6 +76,8 @@
         pane-id="left"
         :view-mode="paneConfigs.left.viewMode"
         :thumbnail-size="paneConfigs.left.thumbnailSize"
+        :sort-options="paneConfigs.left.sortOptions"
+        :filter-options="paneConfigs.left.filterOptions"
         :is-active="activePane === 'left'"
         @activate="activePane = 'left'"
       />
@@ -92,6 +94,8 @@
         pane-id="right"
         :view-mode="paneConfigs.right.viewMode"
         :thumbnail-size="paneConfigs.right.thumbnailSize"
+        :sort-options="paneConfigs.right.sortOptions"
+        :filter-options="paneConfigs.right.filterOptions"
         :is-active="activePane === 'right'"
         @activate="activePane = 'right'"
       />
@@ -102,7 +106,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import FilePane from './FilePane.vue'
-import type { ViewMode, ThumbnailSize, LayoutMode, PaneId } from './types'
+import type { ViewMode, ThumbnailSize, LayoutMode, PaneId, SortOptions, FilterOptions } from './types'
 
 // FilePane refs
 const leftPaneRef = ref<InstanceType<typeof FilePane>>()
@@ -112,11 +116,27 @@ const rightPaneRef = ref<InstanceType<typeof FilePane>>()
 const paneConfigs = ref({
   left: {
     viewMode: 'grid' as ViewMode,
-    thumbnailSize: 'medium' as ThumbnailSize
+    thumbnailSize: 'medium' as ThumbnailSize,
+    sortOptions: {
+      field: 'name',
+      order: 'asc'
+    } as SortOptions,
+    filterOptions: {
+      nameQuery: '',
+      fileType: 'all'
+    } as FilterOptions
   },
   right: {
     viewMode: 'grid' as ViewMode,
-    thumbnailSize: 'medium' as ThumbnailSize
+    thumbnailSize: 'medium' as ThumbnailSize,
+    sortOptions: {
+      field: 'name',
+      order: 'asc'
+    } as SortOptions,
+    filterOptions: {
+      nameQuery: '',
+      fileType: 'all'
+    } as FilterOptions
   }
 })
 

@@ -3,56 +3,75 @@
     <!-- Top indicator -->
     <div v-if="isActive" class="active-indicator"></div>
 
-    <!-- Breadcrumb -->
-    <div class="breadcrumb" @click.stop="$emit('activate')">
-      <div v-if="!pathEditMode" class="breadcrumb-content">
-        <span
-          v-for="(segment, index) in currentPath"
-          :key="index"
-          :class="['breadcrumb-segment']"
-        >
+    <!-- Breadcrumb and Search Bar -->
+    <div class="breadcrumb-container" @click.stop="$emit('activate')">
+      <!-- Breadcrumb Navigation -->
+      <div class="breadcrumb">
+        <div v-if="!pathEditMode" class="breadcrumb-content">
           <span
-            :class="['breadcrumb-item', { current: index === currentPath.length - 1 }]"
-            @click.stop="navigateToIndex(index)"
+            v-for="(segment, index) in currentPath"
+            :key="index"
+            :class="['breadcrumb-segment']"
           >
-            {{ segment }}
+            <span
+              :class="['breadcrumb-item', { current: index === currentPath.length - 1 }]"
+              @click.stop="navigateToIndex(index)"
+            >
+              {{ segment }}
+            </span>
+            <span
+              v-if="index < currentPath.length - 1"
+              :class="['separator', { active: breadcrumbDropdown.index === index }]"
+              @click.stop="toggleBreadcrumbDropdown(index)"
+            >
+              ›
+            </span>
           </span>
-          <span
-            v-if="index < currentPath.length - 1"
-            :class="['separator', { active: breadcrumbDropdown.index === index }]"
-            @click.stop="toggleBreadcrumbDropdown(index)"
-          >
-            ›
-          </span>
-        </span>
-        <button class="path-edit-btn" @click.stop="enterPathEditMode" title="编辑路径">
-          ✏️
-        </button>
-      </div>
-      <div v-else class="path-edit-container">
-        <input
-          ref="pathInputRef"
-          v-model="pathEditValue"
-          class="path-input"
-          @blur="exitPathEditMode"
-          @keydown.enter="applyPathEdit"
-          @keydown.esc="cancelPathEdit"
-          @click.stop
-        />
-        <button class="path-edit-confirm" @click.stop="applyPathEdit" title="确认">✓</button>
-        <button class="path-edit-cancel" @click.stop="cancelPathEdit" title="取消">✗</button>
+          <button class="path-edit-btn" @click.stop="enterPathEditMode" title="编辑路径">
+            ✏️
+          </button>
+
+          <!-- File Stats -->
+          <div class="file-stats">
+            <span v-if="fileStats.photos > 0" class="stat-item stat-photo" title="照片">
+              🖼️ {{ fileStats.photos }}
+            </span>
+            <span v-if="fileStats.videos > 0" class="stat-item stat-video" title="视频">
+              🎬 {{ fileStats.videos }}
+            </span>
+          </div>
+        </div>
+        <div v-else class="path-edit-container">
+          <input
+            ref="pathInputRef"
+            v-model="pathEditValue"
+            class="path-input"
+            @blur="exitPathEditMode"
+            @keydown.enter="applyPathEdit"
+            @keydown.esc="cancelPathEdit"
+            @click.stop
+          />
+          <button class="path-edit-confirm" @click.stop="applyPathEdit" title="确认">✓</button>
+          <button class="path-edit-cancel" @click.stop="cancelPathEdit" title="取消">✗</button>
+        </div>
       </div>
 
-      <!-- Search Input -->
+      <!-- Search Box (always visible) -->
       <div class="search-box">
         <input
-          v-model="searchQuery"
+          v-model="props.filterOptions.nameQuery"
           type="text"
           class="search-input"
           placeholder="搜索..."
           @click.stop
         />
-        <button v-if="searchQuery" class="search-clear" @click.stop="searchQuery = ''">×</button>
+        <button
+          v-if="props.filterOptions.nameQuery"
+          class="search-clear"
+          @click.stop="props.filterOptions.nameQuery = ''"
+        >
+          ×
+        </button>
       </div>
     </div>
 
@@ -82,6 +101,7 @@
           }]"
           :data-item-name="item.name"
           :data-item-index="index"
+          :data-item-type="item.type"
           :draggable="true"
           @click="handleItemClick($event, item.name, index)"
           @dblclick="handleItemDoubleClick(item)"
@@ -103,6 +123,30 @@
 
       <!-- List View -->
       <div v-else class="file-list">
+        <!-- List Header -->
+        <div class="list-header">
+          <div class="header-cell icon-cell"></div>
+          <div class="header-cell name-cell" @click="handleHeaderSort('name')">
+            <span>名称</span>
+            <span v-if="props.sortOptions.field === 'name'" class="sort-indicator">
+              {{ props.sortOptions.order === 'asc' ? '↑' : '↓' }}
+            </span>
+          </div>
+          <div class="header-cell size-cell" @click="handleHeaderSort('size')">
+            <span>大小</span>
+            <span v-if="props.sortOptions.field === 'size'" class="sort-indicator">
+              {{ props.sortOptions.order === 'asc' ? '↑' : '↓' }}
+            </span>
+          </div>
+          <div class="header-cell date-cell" @click="handleHeaderSort('date')">
+            <span>修改日期</span>
+            <span v-if="props.sortOptions.field === 'date'" class="sort-indicator">
+              {{ props.sortOptions.order === 'asc' ? '↑' : '↓' }}
+            </span>
+          </div>
+        </div>
+
+        <!-- List Items -->
         <div
           v-for="(item, index) in visibleItems"
           :key="item.name"
@@ -114,6 +158,7 @@
           }]"
           :data-item-name="item.name"
           :data-item-index="index"
+          :data-item-type="item.type"
           :draggable="true"
           @click="handleItemClick($event, item.name, index)"
           @dblclick="handleItemDoubleClick(item)"
@@ -179,6 +224,13 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- Quick Preview -->
+    <QuickPreview
+      :visible="quickPreview.visible"
+      :item="quickPreview.item"
+      @close="closeQuickPreview"
+    />
   </div>
 </template>
 
@@ -193,6 +245,7 @@ import { mockFolderStructure as originalMockData } from './mockData'
 import type { FileItem, ViewMode, ThumbnailSize, PaneId } from './types'
 import ContextMenu from './ContextMenu.vue'
 import Tooltip from './Tooltip.vue'
+import QuickPreview from './QuickPreview.vue'
 
 // 将 mockData 转换为响应式对象（全局共享）
 const mockFolderStructure = reactive(originalMockData)
@@ -202,6 +255,14 @@ const props = defineProps<{
   viewMode: ViewMode
   thumbnailSize: ThumbnailSize
   isActive: boolean
+  sortOptions: {
+    field: string
+    order: string
+  }
+  filterOptions: {
+    nameQuery: string
+    fileType: string
+  }
 }>()
 
 const emit = defineEmits<{
@@ -213,7 +274,6 @@ const currentPath = ref<string[]>(['Home'])
 const contentAreaRef = ref<HTMLElement>()
 const tooltipRef = ref<InstanceType<typeof Tooltip>>()
 const pathInputRef = ref<HTMLInputElement>()
-const searchQuery = ref('')
 const pathEditMode = ref(false)
 const pathEditValue = ref('')
 const zoomLevel = ref(100) // 缩放级别：50-200%
@@ -239,6 +299,12 @@ const breadcrumbDropdown = ref({
   folders: [] as string[]
 })
 
+// Quick Preview state
+const quickPreview = ref({
+  visible: false,
+  item: null as FileItem | null
+})
+
 // Composables
 const selection = useFileSelection()
 const dragSelectionLogic = useDragSelection()
@@ -253,31 +319,133 @@ const currentFolder = computed(() => {
   return getFolderByPath(mockFolderStructure, currentPath.value)
 })
 
+// 总项目数（未过滤）
+const totalItemsCount = computed(() => {
+  if (!currentFolder.value) return 0
+  return Object.keys(currentFolder.value).length
+})
+
+// 文件类型统计
+const fileStats = computed(() => {
+  if (!currentFolder.value) {
+    return { photos: 0, videos: 0, folders: 0, files: 0 }
+  }
+
+  const items = Object.values(currentFolder.value)
+  return {
+    photos: items.filter(item => item.type === 'photo').length,
+    videos: items.filter(item => item.type === 'video').length,
+    folders: items.filter(item => item.type === 'folder').length,
+    files: items.filter(item => item.type === 'file').length
+  }
+})
+
+// 表头排序点击处理
+function handleHeaderSort(field: string) {
+  if (props.sortOptions.field === field) {
+    // 如果点击的是当前排序字段，切换顺序
+    const current = props.sortOptions.order
+    props.sortOptions.order = current === 'asc' ? 'desc' : 'asc'
+  } else {
+    // 如果点击的是新字段，设置为该字段并默认升序
+    props.sortOptions.field = field as any
+    props.sortOptions.order = 'asc'
+  }
+}
+
 const visibleItems = computed(() => {
   if (!currentFolder.value) return []
 
-  let items = Object.values(currentFolder.value).sort((a, b) => {
-    if (a.type === 'folder' && b.type !== 'folder') return -1
-    if (a.type !== 'folder' && b.type === 'folder') return 1
-    return a.name.localeCompare(b.name)
-  })
+  let items = Object.values(currentFolder.value)
 
-  // 搜索过滤
-  if (searchQuery.value.trim()) {
-    const query = searchQuery.value.toLowerCase()
+  // 文件名搜索过滤
+  if (props.filterOptions.nameQuery.trim()) {
+    const query = props.filterOptions.nameQuery.toLowerCase()
     items = items.filter(item => item.name.toLowerCase().includes(query))
   }
 
-  return items
+  // 排序
+  return sortItems(items, props.sortOptions.field, props.sortOptions.order)
 })
+
+// 排序函数
+function sortItems(items: FileItem[], field: string, order: string): FileItem[] {
+  return [...items].sort((a, b) => {
+    // 文件夹始终优先（除非按类型排序）
+    if (field !== 'type') {
+      if (a.type === 'folder' && b.type !== 'folder') return -1
+      if (a.type !== 'folder' && b.type === 'folder') return 1
+    }
+
+    let comparison = 0
+
+    switch (field) {
+      case 'name':
+        comparison = a.name.localeCompare(b.name, 'zh-CN')
+        break
+      case 'extension': {
+        const extA = getFileExtension(a.name)
+        const extB = getFileExtension(b.name)
+        comparison = extA.localeCompare(extB)
+        // 如果扩展名相同，按文件名排序
+        if (comparison === 0) {
+          comparison = a.name.localeCompare(b.name, 'zh-CN')
+        }
+        break
+      }
+      case 'date':
+        comparison = (a.date || '').localeCompare(b.date || '')
+        break
+      case 'size': {
+        const sizeA = parseSizeToBytes(a.size || '0')
+        const sizeB = parseSizeToBytes(b.size || '0')
+        comparison = sizeA - sizeB
+        break
+      }
+      case 'type':
+        comparison = a.type.localeCompare(b.type)
+        // 如果类型相同，按文件名排序
+        if (comparison === 0) {
+          comparison = a.name.localeCompare(b.name, 'zh-CN')
+        }
+        break
+    }
+
+    return order === 'desc' ? -comparison : comparison
+  })
+}
+
+// 获取文件扩展名
+function getFileExtension(filename: string): string {
+  const lastDot = filename.lastIndexOf('.')
+  if (lastDot === -1 || lastDot === 0) return ''
+  return filename.substring(lastDot + 1).toLowerCase()
+}
+
+// 解析大小字符串为字节数
+function parseSizeToBytes(sizeStr: string): number {
+  const match = sizeStr.match(/^([\d.]+)\s*(B|KB|MB|GB)?$/i)
+  if (!match) return 0
+
+  const value = parseFloat(match[1])
+  const unit = (match[2] || 'B').toUpperCase()
+
+  switch (unit) {
+    case 'GB': return value * 1024 * 1024 * 1024
+    case 'MB': return value * 1024 * 1024
+    case 'KB': return value * 1024
+    case 'B': return value
+    default: return value
+  }
+}
 
 // Methods
 function highlightText(text: string): string {
-  if (!searchQuery.value.trim()) {
+  if (!props.filterOptions.nameQuery.trim()) {
     return text
   }
 
-  const query = searchQuery.value.trim()
+  const query = props.filterOptions.nameQuery.trim()
   const regex = new RegExp(`(${query})`, 'gi')
   return text.replace(regex, '<mark>$1</mark>')
 }
@@ -286,7 +454,6 @@ function navigateToIndex(index: number) {
   currentPath.value = currentPath.value.slice(0, index + 1)
   addToHistory(currentPath.value)
   selection.clearSelection()
-  searchQuery.value = ''
   breadcrumbDropdown.value.visible = false
 }
 
@@ -310,7 +477,6 @@ function goBack() {
     historyIndex.value--
     currentPath.value = [...history.value[historyIndex.value]]
     selection.clearSelection()
-    searchQuery.value = ''
   }
 }
 
@@ -319,7 +485,6 @@ function goForward() {
     historyIndex.value++
     currentPath.value = [...history.value[historyIndex.value]]
     selection.clearSelection()
-    searchQuery.value = ''
   }
 }
 
@@ -376,7 +541,6 @@ function navigateToBreadcrumbFolder(folderName: string) {
   currentPath.value = newPath
   addToHistory(currentPath.value)
   selection.clearSelection()
-  searchQuery.value = ''
   breadcrumbDropdown.value.visible = false
 }
 
@@ -426,7 +590,6 @@ function applyPathEdit() {
   currentPath.value = segments
   addToHistory(currentPath.value)
   selection.clearSelection()
-  searchQuery.value = ''
   pathEditMode.value = false
 }
 
@@ -439,7 +602,6 @@ function navigateToFolder(folderName: string) {
   currentPath.value.push(folderName)
   addToHistory(currentPath.value)
   selection.clearSelection()
-  searchQuery.value = ''
 }
 
 function isFocused(itemName: string): boolean {
@@ -914,7 +1076,7 @@ const gridItemSize = computed(() => {
 })
 
 // 监听搜索变化清除选择
-watch(searchQuery, () => {
+watch(() => props.filterOptions.nameQuery, () => {
   selection.clearSelection()
 })
 
@@ -981,10 +1143,24 @@ useKeyboardNav({
       }
     }
   },
-  onSpace: () => {
+  onSpace: (event: KeyboardEvent) => {
+    event.preventDefault()
+
+    // 如果预览已打开，关闭预览
+    if (quickPreview.value.visible) {
+      quickPreview.value.visible = false
+      quickPreview.value.item = null
+      return
+    }
+
+    // 打开预览
     const focused = selection.focusedItem.value
     if (focused) {
-      selection.toggleItemSelection(focused.name, focused.index)
+      const item = visibleItems.value[focused.index]
+      if (item) {
+        quickPreview.value.visible = true
+        quickPreview.value.item = item
+      }
     }
   },
   onSelectAll: () => {
@@ -992,6 +1168,12 @@ useKeyboardNav({
   },
   getGridColumns
 })
+
+// 关闭快速预览
+function closeQuickPreview() {
+  quickPreview.value.visible = false
+  quickPreview.value.item = null
+}
 
 // 暴露方法给父组件
 defineExpose({
@@ -1036,21 +1218,28 @@ defineExpose({
   z-index: 5;
 }
 
-/* Breadcrumb */
-.breadcrumb {
+/* Breadcrumb Container */
+.breadcrumb-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   padding: 12px 16px;
   border-bottom: 1px solid #f3f4f6;
   background: #f9fafb;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
   cursor: pointer;
   transition: background-color 0.15s;
 }
 
-.breadcrumb:hover {
+.breadcrumb-container:hover {
   background: rgba(59, 130, 246, 0.03);
+}
+
+/* Breadcrumb */
+.breadcrumb {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
 }
 
 .breadcrumb-content {
@@ -1078,6 +1267,36 @@ defineExpose({
 .path-edit-btn:hover {
   background: #f3f4f6;
   opacity: 1;
+}
+
+/* File Stats */
+.file-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 16px;
+  padding-left: 16px;
+  border-left: 1px solid #e5e7eb;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.stat-photo {
+  color: #3b82f6;
+}
+
+.stat-video {
+  color: #ec4899;
 }
 
 .path-edit-container {
@@ -1214,11 +1433,12 @@ defineExpose({
   font-size: 13px;
 }
 
-/* Search Box */
+/* Search Box in Breadcrumb */
 .search-box {
   position: relative;
   flex-shrink: 0;
   width: 200px;
+  margin-left: auto;
 }
 
 .search-input {
@@ -1353,6 +1573,24 @@ defineExpose({
   flex-shrink: 0;
 }
 
+/* 网格视图文件类型图标颜色 */
+.file-item[data-item-type="folder"] .file-icon {
+  color: #f59e0b;
+  font-size: 44px;
+}
+
+.file-item[data-item-type="photo"] .file-icon {
+  color: #3b82f6;
+}
+
+.file-item[data-item-type="video"] .file-icon {
+  color: #ec4899;
+}
+
+.file-item[data-item-type="file"] .file-icon {
+  color: #6b7280;
+}
+
 .file-name {
   font-size: 12px;
   text-align: center;
@@ -1386,27 +1624,79 @@ defineExpose({
   gap: 0;
 }
 
+/* List Header */
+.list-header {
+  display: grid;
+  grid-template-columns: 32px 1fr 100px 140px;
+  align-items: center;
+  padding: 10px 8px;
+  background: #f9fafb;
+  border-bottom: 2px solid #e5e7eb;
+  font-weight: 600;
+  font-size: 13px;
+  color: #374151;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.header-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.header-cell:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.header-cell.icon-cell {
+  cursor: default;
+  pointer-events: none;
+}
+
+.sort-indicator {
+  color: #3b82f6;
+  font-weight: bold;
+  font-size: 14px;
+}
+
 .list-item {
   display: grid;
   grid-template-columns: 32px 1fr 100px 140px;
   align-items: center;
-  padding: 4px 8px;
+  padding: 8px;
   background: white;
-  border: 1px solid transparent;
+  border-bottom: 1px solid #f3f4f6;
   cursor: pointer;
-  transition: background 0.1s;
+  transition: all 0.15s;
   user-select: none;
-  min-height: 32px;
+  min-height: 40px;
+}
+
+/* 斑马条纹 */
+.list-item:nth-child(even) {
+  background: #fafafa;
 }
 
 .list-item:hover {
   background: #f3f4f6;
-  border-color: #e5e7eb;
+  border-bottom-color: #e5e7eb;
 }
 
 .list-item.selected {
-  background: #cce8ff;
-  border-color: #99d1ff;
+  background: #dbeafe;
+  border-bottom-color: #93c5fd;
+}
+
+.list-item.selected:nth-child(even) {
+  background: #dbeafe;
 }
 
 .list-item.drop-target {
@@ -1424,6 +1714,24 @@ defineExpose({
 
 .list-icon {
   font-size: 18px;
+}
+
+/* 文件类型图标颜色 */
+.list-item[data-item-type="folder"] .list-icon {
+  color: #f59e0b;
+  font-size: 20px;
+}
+
+.list-item[data-item-type="photo"] .list-icon {
+  color: #3b82f6;
+}
+
+.list-item[data-item-type="video"] .list-icon {
+  color: #ec4899;
+}
+
+.list-item[data-item-type="file"] .list-icon {
+  color: #6b7280;
 }
 
 .list-name {
