@@ -87,11 +87,13 @@
       @dragover="handlePaneDragOver"
       @dragleave="handlePaneDragLeave"
       @drop="handlePaneDrop"
+      @scroll="handleScroll"
     >
       <!-- Grid View -->
-      <div v-if="viewMode === 'grid'" :class="['file-grid', `grid-${thumbnailSize}`]" :style="gridItemSize">
-        <div
-          v-for="(item, index) in visibleItems"
+      <div v-if="viewMode === 'grid'" :style="virtualContainerStyle">
+        <div :class="['file-grid', `grid-${thumbnailSize}`]" :style="{ ...virtualContentStyle, ...gridItemSize }">
+          <div
+            v-for="(item, index) in renderItems"
           :key="item.name"
           :class="['file-item', {
             selected: selection.isSelected(item.name),
@@ -118,6 +120,7 @@
           </div>
           <div class="file-name" v-html="highlightText(item.name)"></div>
           <div v-if="item.size" class="file-size">{{ item.size }}</div>
+        </div>
         </div>
       </div>
 
@@ -146,9 +149,11 @@
           </div>
         </div>
 
-        <!-- List Items -->
-        <div
-          v-for="(item, index) in visibleItems"
+        <!-- List Items Container -->
+        <div :style="virtualContainerStyle">
+          <div :style="virtualContentStyle">
+            <div
+              v-for="(item, index) in renderItems"
           :key="item.name"
           :class="['list-item', {
             selected: selection.isSelected(item.name),
@@ -174,6 +179,8 @@
           <span class="list-name" v-html="highlightText(item.name)"></span>
           <span class="list-size">{{ item.size || '-' }}</span>
           <span class="list-date">{{ item.date || '-' }}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -231,6 +238,27 @@
       :item="quickPreview.item"
       @close="closeQuickPreview"
     />
+
+    <!-- Debug Panel (开发环境) -->
+    <DebugPanel
+      v-if="isDevelopment"
+      :visible="debugPanelVisible"
+      :metrics="debugMetrics"
+      @close="debugPanelVisible = false"
+      @generate="generateTestData"
+      @scrollTo="handleDebugScrollTo"
+      @clear="clearTestData"
+    />
+
+    <!-- Debug Toggle Button (开发环境) -->
+    <button
+      v-if="isDevelopment && isActive"
+      class="debug-toggle"
+      @click="debugPanelVisible = !debugPanelVisible"
+      title="虚拟滚动调试面板"
+    >
+      🔬
+    </button>
   </div>
 </template>
 
@@ -240,15 +268,20 @@ import { useFileSelection } from '@/composables/fileManager/useFileSelection'
 import { useKeyboardNav } from '@/composables/fileManager/useKeyboardNav'
 import { useDragSelection } from '@/composables/fileManager/useDragSelection'
 import { useDragAndDrop } from '@/composables/fileManager/useDragAndDrop'
+import { useVirtualScroll, useVirtualGrid } from '@/composables/fileManager/useVirtualScroll'
 import { moveItems, getFolderByPath, searchItems } from '@/utils/fileManager/fileOperations'
 import { mockFolderStructure as originalMockData } from './mockData'
 import type { FileItem, ViewMode, ThumbnailSize, PaneId } from './types'
 import ContextMenu from './ContextMenu.vue'
 import Tooltip from './Tooltip.vue'
 import QuickPreview from './QuickPreview.vue'
+import DebugPanel from './DebugPanel.vue'
 
 // 将 mockData 转换为响应式对象（全局共享）
 const mockFolderStructure = reactive(originalMockData)
+
+// 开发环境标识
+const isDevelopment = import.meta.env.DEV
 
 const props = defineProps<{
   paneId: PaneId
@@ -305,14 +338,47 @@ const quickPreview = ref({
   item: null as FileItem | null
 })
 
+// Debug Panel (开发环境)
+const debugPanelVisible = ref(false)
+
+const debugMetrics = computed(() => {
+  const total = visibleItems.value.length
+  const rendered = renderItems.value.length
+  const savings = total > 0 ? Math.round((1 - rendered / total) * 100) : 0
+
+  const virtual = props.viewMode === 'list' ? listVirtual : gridVirtual
+
+  return {
+    totalItems: total,
+    renderedItems: rendered,
+    savings: savings,
+    virtualScrollEnabled: shouldUseVirtualScroll.value,
+    viewMode: props.viewMode,
+    zoomLevel: zoomLevel.value,
+    scrollTop: virtual.scrollTop.value,
+    startIndex: virtual.startIndex.value,
+    endIndex: virtual.endIndex.value,
+    totalHeight: virtual.totalHeight.value,
+    columns: props.viewMode === 'grid' ? gridVirtual.columns.value : undefined
+  }
+})
+
+// Container size for virtual scrolling
+const containerWidth = ref(800)
+const containerHeight = ref(600)
+
 // Composables
 const selection = useFileSelection()
 const dragSelectionLogic = useDragSelection()
 const dragDropLogic = useDragAndDrop()
 
 // 解构composables以便使用
-const { dragSelection, autoScroll, selectionBoxStyle, startDragSelection, updateDragSelection, checkAutoScroll, startAutoScroll, finishDragSelection, cancelDragSelection, isIntersecting } = dragSelectionLogic
+const { dragSelection, autoScroll, selectionBox, selectionBoxStyle, startDragSelection, updateDragSelection, checkAutoScroll, startAutoScroll, finishDragSelection, cancelDragSelection, isIntersecting } = dragSelectionLogic
 const { dragState, startDrag, setDropTarget, setPaneDragOver, createDragPreview, cleanupDragPreview, endDrag, resetDragState } = dragDropLogic
+
+// 虚拟滚动配置
+const ENABLE_VIRTUAL_SCROLL = ref(true) // 可以通过这个开关控制是否启用
+const VIRTUAL_SCROLL_THRESHOLD = 100 // 超过100个项目时启用虚拟滚动
 
 // Computed
 const currentFolder = computed(() => {
@@ -366,6 +432,78 @@ const visibleItems = computed(() => {
 
   // 排序
   return sortItems(items, props.sortOptions.field, props.sortOptions.order)
+})
+
+// 判断是否需要启用虚拟滚动
+const shouldUseVirtualScroll = computed(() => {
+  return ENABLE_VIRTUAL_SCROLL.value && visibleItems.value.length > VIRTUAL_SCROLL_THRESHOLD
+})
+
+// 列表模式虚拟滚动
+const LIST_ITEM_HEIGHT = 40
+const listVirtual = useVirtualScroll({
+  items: visibleItems,
+  itemHeight: LIST_ITEM_HEIGHT,
+  containerHeight,
+  overscan: 5
+})
+
+// 计算网格项目尺寸
+const gridItemWidth = computed(() => {
+  const baseSize = props.thumbnailSize === 'small' ? 80 : props.thumbnailSize === 'medium' ? 100 : 130
+  return Math.round(baseSize * (zoomLevel.value / 100))
+})
+
+const gridItemHeightValue = computed(() => {
+  const baseSize = props.thumbnailSize === 'small' ? 80 : props.thumbnailSize === 'medium' ? 100 : 130
+  return Math.round(baseSize * (zoomLevel.value / 100)) + 24 // +24 for filename
+})
+
+// 网格模式虚拟滚动（传递响应式引用）
+const gridVirtual = useVirtualGrid({
+  items: visibleItems,
+  itemWidth: gridItemWidth,
+  itemHeight: gridItemHeightValue,
+  containerWidth,
+  containerHeight,
+  gap: 8,
+  overscan: 2
+})
+
+// 根据视图模式和是否启用虚拟滚动选择要渲染的项目
+const renderItems = computed(() => {
+  if (!shouldUseVirtualScroll.value) {
+    return visibleItems.value
+  }
+
+  return props.viewMode === 'list'
+    ? listVirtual.visibleItems.value
+    : gridVirtual.visibleItems.value
+})
+
+// 虚拟滚动容器样式
+const virtualContainerStyle = computed(() => {
+  if (!shouldUseVirtualScroll.value) {
+    return {}
+  }
+
+  const virtual = props.viewMode === 'list' ? listVirtual : gridVirtual
+  return {
+    height: `${virtual.totalHeight.value}px`,
+    position: 'relative' as const
+  }
+})
+
+// 虚拟滚动内容偏移样式
+const virtualContentStyle = computed(() => {
+  if (!shouldUseVirtualScroll.value) {
+    return {}
+  }
+
+  const virtual = props.viewMode === 'list' ? listVirtual : gridVirtual
+  return {
+    transform: `translateY(${virtual.offsetY.value}px)`
+  }
 })
 
 // 排序函数
@@ -725,19 +863,58 @@ function handleMouseUp() {
 }
 
 
-// 更新框选的项（使用composable的isIntersecting方法）
+// 更新框选的项（优化：基于数据遍历而非DOM查询，支持虚拟滚动）
 function updateSelectionFromDragBox() {
-  if (!contentAreaRef.value) return
+  if (!contentAreaRef.value || !selectionBox.value) return
 
-  const items = contentAreaRef.value.querySelectorAll('.file-item, .list-item')
+  const box = selectionBox.value
+  const scrollTop = contentAreaRef.value.scrollTop
   const itemsInSelection = new Set<string>()
 
-  items.forEach(item => {
-    if (isIntersecting(item as HTMLElement, contentAreaRef.value!)) {
-      const itemName = (item as HTMLElement).dataset.itemName
-      if (itemName) {
-        itemsInSelection.add(itemName)
+  // 遍历所有数据项而非DOM节点
+  visibleItems.value.forEach((item, index) => {
+    // 根据视图模式计算项目边界
+    let itemBounds
+
+    if (props.viewMode === 'list') {
+      // 列表模式：使用虚拟滚动的边界计算
+      if (shouldUseVirtualScroll.value && listVirtual.getItemBounds) {
+        itemBounds = listVirtual.getItemBounds(index)
+      } else {
+        itemBounds = {
+          top: index * LIST_ITEM_HEIGHT,
+          left: 0,
+          bottom: (index + 1) * LIST_ITEM_HEIGHT,
+          right: containerWidth.value
+        }
       }
+    } else {
+      // 网格模式：使用虚拟滚动的边界计算
+      if (shouldUseVirtualScroll.value && gridVirtual.getItemBounds) {
+        itemBounds = gridVirtual.getItemBounds(index)
+      } else {
+        const col = index % Math.floor(containerWidth.value / (gridItemWidth.value + 8))
+        const row = Math.floor(index / Math.floor(containerWidth.value / (gridItemWidth.value + 8)))
+        itemBounds = {
+          top: row * (gridItemHeightValue.value + 8),
+          left: col * (gridItemWidth.value + 8),
+          bottom: (row + 1) * (gridItemHeightValue.value + 8),
+          right: (col + 1) * (gridItemWidth.value + 8)
+        }
+      }
+    }
+
+    // 调整为相对于可见区域的坐标
+    const adjustedBounds = {
+      top: itemBounds.top - scrollTop,
+      left: itemBounds.left,
+      bottom: itemBounds.bottom - scrollTop,
+      right: itemBounds.right
+    }
+
+    // 检查是否与选择框相交
+    if (isBoxIntersecting(box, adjustedBounds)) {
+      itemsInSelection.add(item.name)
     }
   })
 
@@ -758,6 +935,16 @@ function updateSelectionFromDragBox() {
       selection.selectedItems.value.add(name)
     })
   }
+}
+
+// 辅助函数：判断两个矩形是否相交
+function isBoxIntersecting(box1: { top: number; left: number; bottom: number; right: number }, box2: { top: number; left: number; bottom: number; right: number }) {
+  return !(
+    box1.right < box2.left ||
+    box1.left > box2.right ||
+    box1.bottom < box2.top ||
+    box1.top > box2.bottom
+  )
 }
 
 function handleContentClick(event: MouseEvent) {
@@ -1050,6 +1237,14 @@ function getGridColumns(): number {
   return 1
 }
 
+// 处理滚动事件（虚拟滚动）
+function handleScroll(event: Event) {
+  if (!shouldUseVirtualScroll.value) return
+
+  const virtual = props.viewMode === 'list' ? listVirtual : gridVirtual
+  virtual.onScroll(event)
+}
+
 // 处理Ctrl+滚轮缩放
 function handleWheel(event: WheelEvent) {
   if (!event.ctrlKey) return
@@ -1080,6 +1275,15 @@ watch(() => props.filterOptions.nameQuery, () => {
   selection.clearSelection()
 })
 
+// 容器尺寸监听
+function updateContainerSize() {
+  if (contentAreaRef.value) {
+    const rect = contentAreaRef.value.getBoundingClientRect()
+    containerWidth.value = rect.width
+    containerHeight.value = rect.height
+  }
+}
+
 // 关闭breadcrumb dropdown 和 添加滚轮监听
 onMounted(() => {
   const closeDropdown = () => {
@@ -1089,6 +1293,18 @@ onMounted(() => {
 
   if (contentAreaRef.value) {
     contentAreaRef.value.addEventListener('wheel', handleWheel, { passive: false })
+
+    // 初始化容器尺寸
+    updateContainerSize()
+
+    // 监听容器尺寸变化
+    const resizeObserver = new ResizeObserver(() => {
+      updateContainerSize()
+    })
+    resizeObserver.observe(contentAreaRef.value)
+
+    // 存储observer以便清理
+    ;(contentAreaRef.value as any)._resizeObserver = resizeObserver
   }
 })
 
@@ -1099,6 +1315,12 @@ onUnmounted(() => {
 
   if (contentAreaRef.value) {
     contentAreaRef.value.removeEventListener('wheel', handleWheel)
+
+    // 清理 ResizeObserver
+    const observer = (contentAreaRef.value as any)._resizeObserver
+    if (observer) {
+      observer.disconnect()
+    }
   }
 })
 
@@ -1175,10 +1397,103 @@ function closeQuickPreview() {
   quickPreview.value.item = null
 }
 
+// ==================== 调试工具函数 ====================
+
+// 生成测试数据
+function generateTestData(count: number) {
+  const testItems: Record<string, FileItem> = {}
+
+  // 生成文件夹（10%）
+  const folderCount = Math.floor(count * 0.1)
+  for (let i = 0; i < folderCount; i++) {
+    const name = `folder_${String(i + 1).padStart(5, '0')}`
+    testItems[name] = {
+      name,
+      type: 'folder',
+      size: '',
+      date: new Date().toLocaleString()
+    }
+  }
+
+  // 生成照片文件（70%）
+  const photoCount = Math.floor(count * 0.7)
+  for (let i = 0; i < photoCount; i++) {
+    const name = `photo_${String(i + 1).padStart(5, '0')}.jpg`
+    const sizeMB = (Math.random() * 10 + 0.5).toFixed(2)
+    testItems[name] = {
+      name,
+      type: 'photo',
+      size: `${sizeMB} MB`,
+      date: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toLocaleString()
+    }
+  }
+
+  // 生成视频文件（20%）
+  const videoCount = count - folderCount - photoCount
+  for (let i = 0; i < videoCount; i++) {
+    const name = `video_${String(i + 1).padStart(5, '0')}.mp4`
+    const sizeMB = (Math.random() * 500 + 10).toFixed(2)
+    testItems[name] = {
+      name,
+      type: 'video',
+      size: `${sizeMB} MB`,
+      date: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toLocaleString()
+    }
+  }
+
+  // 更新mock数据结构中当前路径的文件夹
+  // 导航到根目录
+  currentPath.value = []
+
+  // 直接修改mock数据
+  Object.keys(mockFolderStructure).forEach(key => delete mockFolderStructure[key])
+  Object.assign(mockFolderStructure, testItems)
+
+  console.log(`✅ 已生成 ${count} 个测试文件`)
+  console.log(`📁 文件夹: ${folderCount}`)
+  console.log(`🖼️ 照片: ${photoCount}`)
+  console.log(`🎬 视频: ${videoCount}`)
+}
+
+// 清空测试数据
+function clearTestData() {
+  // 导航到根目录
+  currentPath.value = []
+
+  // 清空mock数据
+  Object.keys(mockFolderStructure).forEach(key => delete mockFolderStructure[key])
+
+  console.log('🗑️ 已清空测试数据')
+}
+
+// 调试滚动操作
+function handleDebugScrollTo(position: 'top' | 'bottom' | 'middle') {
+  if (!contentAreaRef.value) return
+
+  const container = contentAreaRef.value
+  const virtual = props.viewMode === 'list' ? listVirtual : gridVirtual
+
+  switch (position) {
+    case 'top':
+      container.scrollTop = 0
+      break
+    case 'bottom':
+      container.scrollTop = virtual.totalHeight.value
+      break
+    case 'middle':
+      container.scrollTop = virtual.totalHeight.value / 2
+      break
+  }
+
+  console.log(`🎯 滚动到${position === 'top' ? '顶部' : position === 'bottom' ? '底部' : '中间'}`)
+}
+
 // 暴露方法给父组件
 defineExpose({
   goBack,
-  goForward
+  goForward,
+  generateTestData,  // 暴露给外部调试使用
+  clearTestData
 })
 </script>
 
@@ -1762,5 +2077,35 @@ defineExpose({
   background: rgba(59, 130, 246, 0.1);
   pointer-events: none;
   z-index: 10;
+}
+
+/* Debug Toggle Button */
+.debug-toggle {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00ff00, #00cc00);
+  border: 2px solid #00ff00;
+  color: #000;
+  font-size: 24px;
+  cursor: pointer;
+  z-index: 9999;
+  box-shadow: 0 4px 16px rgba(0, 255, 0, 0.4);
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.debug-toggle:hover {
+  transform: scale(1.1) rotate(10deg);
+  box-shadow: 0 6px 24px rgba(0, 255, 0, 0.6);
+}
+
+.debug-toggle:active {
+  transform: scale(0.95);
 }
 </style>

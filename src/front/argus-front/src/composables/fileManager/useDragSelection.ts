@@ -23,6 +23,18 @@ export function useDragSelection() {
     direction: { x: 0, y: 0 }
   })
 
+  // 计算选择框边界（用于碰撞检测）
+  const selectionBox = computed(() => {
+    if (!dragSelection.value.isSelecting) return null
+
+    const left = Math.min(dragSelection.value.startX, dragSelection.value.currentX)
+    const top = Math.min(dragSelection.value.startY, dragSelection.value.currentY)
+    const right = Math.max(dragSelection.value.startX, dragSelection.value.currentX)
+    const bottom = Math.max(dragSelection.value.startY, dragSelection.value.currentY)
+
+    return { top, left, bottom, right }
+  })
+
   // 计算选择框样式
   const selectionBoxStyle = computed(() => {
     if (!dragSelection.value.isSelecting) return { display: 'none' }
@@ -239,6 +251,7 @@ export function useDragSelection() {
   return {
     dragSelection,
     autoScroll,
+    selectionBox,
     selectionBoxStyle,
     startDragSelection,
     updateDragSelection,
