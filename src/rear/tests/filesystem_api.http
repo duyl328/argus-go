@@ -1,0 +1,276 @@
+### Argus 文件系统API测试
+### 基础URL
+@baseUrl = http://localhost:8726
+@apiUrl = {{baseUrl}}/api/v1
+
+###############################################################################
+# 1. 文件系统浏览测试
+###############################################################################
+
+### 1.1 获取驱动器列表（根目录）
+GET {{apiUrl}}/filesystem/browse
+Accept: application/json
+
+### 1.2 浏览指定目录 (Windows路径)
+GET {{apiUrl}}/filesystem/browse?path=D:\Photos
+Accept: application/json
+
+### 1.3 浏览指定目录 (Unix路径示例)
+GET {{apiUrl}}/filesystem/browse?path=/home/user/photos
+Accept: application/json
+
+### 1.4 浏览目录 - 带排序参数
+GET {{apiUrl}}/filesystem/browse?path=D:\Photos&sort=name&order=asc
+Accept: application/json
+
+### 1.5 浏览目录 - 按文件大小排序
+GET {{apiUrl}}/filesystem/browse?path=D:\Photos&sort=size&order=desc
+Accept: application/json
+
+### 1.6 浏览目录 - 只显示照片
+GET {{apiUrl}}/filesystem/browse?path=D:\Photos&filter=photo
+Accept: application/json
+
+###############################################################################
+# 2. 磁盘使用情况测试
+###############################################################################
+
+### 2.1 获取C盘使用情况
+GET {{apiUrl}}/filesystem/disk-usage?path=C:\
+Accept: application/json
+
+### 2.2 获取D盘使用情况
+GET {{apiUrl}}/filesystem/disk-usage?path=D:\
+Accept: application/json
+
+###############################################################################
+# 3. 文件/目录操作测试
+###############################################################################
+
+### 3.1 创建新目录
+POST {{apiUrl}}/filesystem/directory
+Content-Type: application/json
+
+{
+  "path": "D:\\Photos\\TestFolder_20251002"
+}
+
+### 3.2 创建嵌套目录
+POST {{apiUrl}}/filesystem/directory
+Content-Type: application/json
+
+{
+  "path": "D:\\Photos\\TestFolder_20251002\\SubFolder\\DeepFolder"
+}
+
+### 3.3 删除文件
+DELETE {{apiUrl}}/filesystem/item?path=D:\Photos\test_file.txt&operation_id=op-001
+Accept: application/json
+
+### 3.4 删除目录（递归）
+DELETE {{apiUrl}}/filesystem/item?path=D:\Photos\TestFolder_20251002&operation_id=op-002&recursive=true
+Accept: application/json
+
+### 3.5 移动/重命名文件
+PUT {{apiUrl}}/filesystem/item/move
+Content-Type: application/json
+
+{
+  "source": "D:\\Photos\\old_name.jpg",
+  "destination": "D:\\Photos\\2024\\new_name.jpg",
+  "operation_id": "op-003",
+  "overwrite": false
+}
+
+### 3.6 重命名目录
+PUT {{apiUrl}}/filesystem/item/move
+Content-Type: application/json
+
+{
+  "source": "D:\\Photos\\OldFolderName",
+  "destination": "D:\\Photos\\NewFolderName",
+  "operation_id": "op-004",
+  "overwrite": false
+}
+
+### 3.7 复制文件
+POST {{apiUrl}}/filesystem/item/copy
+Content-Type: application/json
+
+{
+  "source": "D:\\Photos\\photo.jpg",
+  "destination": "D:\\Backup\\photo.jpg",
+  "operation_id": "op-005",
+  "overwrite": false
+}
+
+### 3.8 复制目录
+POST {{apiUrl}}/filesystem/item/copy
+Content-Type: application/json
+
+{
+  "source": "D:\\Photos\\2024",
+  "destination": "D:\\Backup\\2024",
+  "operation_id": "op-006",
+  "overwrite": false
+}
+
+### 3.9 复制文件（允许覆盖）
+POST {{apiUrl}}/filesystem/item/copy
+Content-Type: application/json
+
+{
+  "source": "D:\\Photos\\photo.jpg",
+  "destination": "D:\\Backup\\photo.jpg",
+  "operation_id": "op-007",
+  "overwrite": true
+}
+
+###############################################################################
+# 4. 文件搜索测试
+###############################################################################
+
+### 4.1 搜索所有文件（非递归）
+GET {{apiUrl}}/filesystem/search?path=D:\Photos&pattern=*&recursive=false
+Accept: application/json
+
+### 4.2 搜索JPG文件（递归）
+GET {{apiUrl}}/filesystem/search?path=D:\Photos&pattern=*.jpg&recursive=true
+Accept: application/json
+
+### 4.3 搜索PNG文件
+GET {{apiUrl}}/filesystem/search?path=D:\Photos&pattern=*.png&recursive=true
+Accept: application/json
+
+### 4.4 搜索所有照片（带类型过滤）
+GET {{apiUrl}}/filesystem/search?path=D:\Photos&pattern=*&type=photo&recursive=true
+Accept: application/json
+
+### 4.5 搜索所有视频
+GET {{apiUrl}}/filesystem/search?path=D:\Photos&pattern=*&type=video&recursive=true
+Accept: application/json
+
+### 4.6 按文件名模式搜索
+GET {{apiUrl}}/filesystem/search?path=D:\Photos&pattern=sunset*.jpg&recursive=true
+Accept: application/json
+
+###############################################################################
+# 5. 错误场景测试
+###############################################################################
+
+### 5.1 浏览不存在的路径
+GET {{apiUrl}}/filesystem/browse?path=D:\NonExistentFolder
+Accept: application/json
+
+### 5.2 获取磁盘使用情况 - 无效路径
+GET {{apiUrl}}/filesystem/disk-usage?path=
+Accept: application/json
+
+### 5.3 创建目录 - 路径已存在
+POST {{apiUrl}}/filesystem/directory
+Content-Type: application/json
+
+{
+  "path": "D:\\Photos"
+}
+
+### 5.4 删除不存在的文件
+DELETE {{apiUrl}}/filesystem/item?path=D:\NonExistent\file.txt
+Accept: application/json
+
+### 5.5 移动不存在的文件
+PUT {{apiUrl}}/filesystem/item/move
+Content-Type: application/json
+
+{
+  "source": "D:\\NonExistent\\file.txt",
+  "destination": "D:\\Photos\\file.txt",
+  "overwrite": false
+}
+
+### 5.6 复制到已存在的位置（不允许覆盖）
+POST {{apiUrl}}/filesystem/item/copy
+Content-Type: application/json
+
+{
+  "source": "D:\\Photos\\photo.jpg",
+  "destination": "D:\\Photos\\existing_photo.jpg",
+  "overwrite": false
+}
+
+###############################################################################
+# 6. 健康检查
+###############################################################################
+
+### 6.1 健康检查
+GET {{baseUrl}}/health
+Accept: application/json
+
+### 6.2 API根路径
+GET {{apiUrl}}
+Accept: application/json
+
+###############################################################################
+# 测试说明
+###############################################################################
+
+# 测试前准备：
+# 1. 确保后端服务运行在 localhost:8726
+# 2. 根据实际环境修改路径（Windows使用反斜杠，Unix使用正斜杠）
+# 3. 创建测试用的文件和目录
+# 4. 注意：删除操作是真实的，请小心测试
+
+# 测试顺序建议：
+# 1. 先测试健康检查和浏览功能
+# 2. 测试创建目录
+# 3. 测试搜索功能
+# 4. 测试复制和移动
+# 5. 最后测试删除（确保删除的是测试数据）
+
+# 注意事项：
+# - operation_id 用于SSE事件去重，可以使用UUID
+# - Windows路径需要使用双反斜杠或单正斜杠
+# - 递归删除会删除目录下所有内容，请谨慎使用
+# - 搜索pattern使用通配符语法：* 表示任意字符
+
+###############################################################################
+# 实际应用场景示例
+###############################################################################
+
+### 场景1: 创建新年份照片目录结构
+POST {{apiUrl}}/filesystem/directory
+Content-Type: application/json
+
+{
+  "path": "D:\\Photos\\2025\\January"
+}
+
+### 场景2: 将照片移动到对应月份文件夹
+PUT {{apiUrl}}/filesystem/item/move
+Content-Type: application/json
+
+{
+  "source": "D:\\Photos\\IMG_20250102.jpg",
+  "destination": "D:\\Photos\\2025\\January\\IMG_20250102.jpg",
+  "operation_id": "move-to-january-001",
+  "overwrite": false
+}
+
+### 场景3: 备份照片到外部存储
+POST {{apiUrl}}/filesystem/item/copy
+Content-Type: application/json
+
+{
+  "source": "D:\\Photos\\2024",
+  "destination": "E:\\Backup\\Photos\\2024",
+  "operation_id": "backup-2024-photos",
+  "overwrite": false
+}
+
+### 场景4: 查找所有未整理的照片
+GET {{apiUrl}}/filesystem/search?path=D:\Photos&pattern=IMG_*.jpg&type=photo&recursive=false
+Accept: application/json
+
+### 场景5: 清理临时文件
+DELETE {{apiUrl}}/filesystem/item?path=D:\Photos\.temp&operation_id=cleanup-temp&recursive=true
+Accept: application/json

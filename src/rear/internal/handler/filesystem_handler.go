@@ -161,19 +161,29 @@ func (h *FileOperationsHandler) CreateDirectory(c *gin.Context) {
 		zap.String("client_ip", c.ClientIP()),
 	)
 
-	// 这里可以添加创建目录的逻辑
-	// 暂时返回成功响应，实际实现需要调用utils.FileUtils.CreateDir
+	// 调用service创建目录
+	result, err := h.fileSystemService.CreateDirectory(req.Path)
+	if err != nil {
+		logger.Error("Failed to create directory",
+			zap.String("path", req.Path),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusBadRequest, model.Response{
+			Code:    http.StatusBadRequest,
+			Message: err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, model.Response{
 		Code:    http.StatusOK,
-		Message: "创建目录功能正在开发中",
-		Data: map[string]string{
-			"path": req.Path,
-		},
+		Message: "创建目录成功",
+		Data:    result,
 	})
 }
 
 // DeleteItem 删除文件或目录
-// DELETE /api/v1/filesystem/item?path=/path/to/item
+// DELETE /api/v1/filesystem/item?path=/path/to/item&operation_id=uuid
 func (h *FileOperationsHandler) DeleteItem(c *gin.Context) {
 	path := c.Query("path")
 	if path == "" {
@@ -184,29 +194,47 @@ func (h *FileOperationsHandler) DeleteItem(c *gin.Context) {
 		return
 	}
 
+	operationID := c.Query("operation_id")
+	recursiveStr := c.DefaultQuery("recursive", "true")
+	recursive := recursiveStr == "true"
+
 	logger.Info("Delete item request",
 		zap.String("path", path),
+		zap.String("operation_id", operationID),
+		zap.Bool("recursive", recursive),
 		zap.String("client_ip", c.ClientIP()),
 	)
 
-	// 这里可以添加删除逻辑
-	// 暂时返回成功响应，实际实现需要调用utils.FileUtils.Delete
+	// 调用service删除
+	result, err := h.fileSystemService.DeleteItem(path, operationID)
+	if err != nil {
+		logger.Error("Failed to delete item",
+			zap.String("path", path),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusBadRequest, model.Response{
+			Code:    http.StatusBadRequest,
+			Message: err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, model.Response{
 		Code:    http.StatusOK,
-		Message: "删除功能正在开发中",
-		Data: map[string]string{
-			"path": path,
-		},
+		Message: "删除成功",
+		Data:    result,
 	})
 }
 
 // MoveItem 移动/重命名文件或目录
 // PUT /api/v1/filesystem/item/move
-// Body: {"source": "/old/path", "destination": "/new/path"}
+// Body: {"source": "/old/path", "destination": "/new/path", "operation_id": "uuid", "overwrite": false}
 func (h *FileOperationsHandler) MoveItem(c *gin.Context) {
 	var req struct {
 		Source      string `json:"source" binding:"required"`
 		Destination string `json:"destination" binding:"required"`
+		OperationID string `json:"operation_id"`
+		Overwrite   bool   `json:"overwrite"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -220,28 +248,41 @@ func (h *FileOperationsHandler) MoveItem(c *gin.Context) {
 	logger.Info("Move item request",
 		zap.String("source", req.Source),
 		zap.String("destination", req.Destination),
+		zap.String("operation_id", req.OperationID),
+		zap.Bool("overwrite", req.Overwrite),
 		zap.String("client_ip", c.ClientIP()),
 	)
 
-	// 这里可以添加移动逻辑
-	// 暂时返回成功响应，实际实现需要调用utils.FileUtils.MoveFile
+	// 调用service移动
+	result, err := h.fileSystemService.MoveItem(req.Source, req.Destination, req.OperationID, req.Overwrite)
+	if err != nil {
+		logger.Error("Failed to move item",
+			zap.String("source", req.Source),
+			zap.String("destination", req.Destination),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusBadRequest, model.Response{
+			Code:    http.StatusBadRequest,
+			Message: err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, model.Response{
 		Code:    http.StatusOK,
-		Message: "移动功能正在开发中",
-		Data: map[string]interface{}{
-			"source":      req.Source,
-			"destination": req.Destination,
-		},
+		Message: "移动成功",
+		Data:    result,
 	})
 }
 
 // CopyItem 复制文件或目录
 // POST /api/v1/filesystem/item/copy
-// Body: {"source": "/source/path", "destination": "/dest/path", "overwrite": false}
+// Body: {"source": "/source/path", "destination": "/dest/path", "operation_id": "uuid", "overwrite": false}
 func (h *FileOperationsHandler) CopyItem(c *gin.Context) {
 	var req struct {
 		Source      string `json:"source" binding:"required"`
 		Destination string `json:"destination" binding:"required"`
+		OperationID string `json:"operation_id"`
 		Overwrite   bool   `json:"overwrite"`
 	}
 
@@ -256,29 +297,40 @@ func (h *FileOperationsHandler) CopyItem(c *gin.Context) {
 	logger.Info("Copy item request",
 		zap.String("source", req.Source),
 		zap.String("destination", req.Destination),
+		zap.String("operation_id", req.OperationID),
 		zap.Bool("overwrite", req.Overwrite),
 		zap.String("client_ip", c.ClientIP()),
 	)
 
-	// 这里可以添加复制逻辑
-	// 暂时返回成功响应，实际实现需要调用utils.FileUtils.CopyFile或CopyDir
+	// 调用service复制
+	result, err := h.fileSystemService.CopyItem(req.Source, req.Destination, req.OperationID, req.Overwrite)
+	if err != nil {
+		logger.Error("Failed to copy item",
+			zap.String("source", req.Source),
+			zap.String("destination", req.Destination),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusBadRequest, model.Response{
+			Code:    http.StatusBadRequest,
+			Message: err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, model.Response{
 		Code:    http.StatusOK,
-		Message: "复制功能正在开发中",
-		Data: map[string]interface{}{
-			"source":      req.Source,
-			"destination": req.Destination,
-			"overwrite":   req.Overwrite,
-		},
+		Message: "复制成功",
+		Data:    result,
 	})
 }
 
 // SearchFiles 搜索文件
-// GET /api/v1/filesystem/search?path=/search/path&pattern=*.txt&recursive=true
+// GET /api/v1/filesystem/search?path=/search/path&pattern=*.txt&recursive=true&type=photo
 func (h *FileSystemHandler) SearchFiles(c *gin.Context) {
 	path := c.Query("path")
 	pattern := c.Query("pattern")
 	recursiveStr := c.Query("recursive")
+	fileType := c.Query("type")
 
 	if path == "" {
 		c.JSON(http.StatusBadRequest, model.Response{
@@ -302,19 +354,28 @@ func (h *FileSystemHandler) SearchFiles(c *gin.Context) {
 	logger.Info("Search files request",
 		zap.String("path", path),
 		zap.String("pattern", pattern),
+		zap.String("type", fileType),
 		zap.Bool("recursive", recursive),
 		zap.String("client_ip", c.ClientIP()),
 	)
 
-	// 这里可以添加搜索逻辑
-	// 暂时返回成功响应，实际实现需要调用utils.FileUtils.SearchFiles
+	// 调用service搜索
+	result, err := h.fileSystemService.SearchFiles(path, pattern, fileType, recursive)
+	if err != nil {
+		logger.Error("Failed to search files",
+			zap.String("path", path),
+			zap.Error(err),
+		)
+		c.JSON(http.StatusBadRequest, model.Response{
+			Code:    http.StatusBadRequest,
+			Message: err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, model.Response{
 		Code:    http.StatusOK,
-		Message: "搜索功能正在开发中",
-		Data: map[string]interface{}{
-			"path":      path,
-			"pattern":   pattern,
-			"recursive": recursive,
-		},
+		Message: "搜索完成",
+		Data:    result,
 	})
 }

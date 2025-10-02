@@ -300,3 +300,201 @@ func (fs *FileSystemService) GetDiskUsage(path string) (*DriveInfo, error) {
 func (fs *FileSystemService) FormatSize(bytes int64) string {
 	return utils.FileUtils.FormatFileSize(bytes)
 }
+
+// CreateDirectory 创建目录
+func (fs *FileSystemService) CreateDirectory(path string) (map[string]interface{}, error) {
+	// 检查路径是否已存在
+	if utils.FileUtils.Exists(path) {
+		return nil, fmt.Errorf("路径已存在: %s", path)
+	}
+
+	// 创建目录
+	if err := utils.FileUtils.CreateDir(path); err != nil {
+		return nil, fmt.Errorf("创建目录失败: %w", err)
+	}
+
+	return map[string]interface{}{
+		"path":       path,
+		"created_at": time.Now().Format(time.RFC3339),
+	}, nil
+}
+
+// DeleteItem 删除文件或目录
+func (fs *FileSystemService) DeleteItem(path string, operationID string) (map[string]interface{}, error) {
+	// 检查路径是否存在
+	if !utils.FileUtils.Exists(path) {
+		return nil, fmt.Errorf("路径不存在: %s", path)
+	}
+
+	// 删除文件或目录
+	if err := utils.FileUtils.Delete(path); err != nil {
+		return nil, fmt.Errorf("删除失败: %w", err)
+	}
+
+	return map[string]interface{}{
+		"path":         path,
+		"deleted_at":   time.Now().Format(time.RFC3339),
+		"operation_id": operationID,
+	}, nil
+}
+
+// MoveItem 移动/重命名文件或目录
+func (fs *FileSystemService) MoveItem(source, destination, operationID string, overwrite bool) (map[string]interface{}, error) {
+	// 检查源路径是否存在
+	if !utils.FileUtils.Exists(source) {
+		return nil, fmt.Errorf("源路径不存在: %s", source)
+	}
+
+	// 检查目标路径是否已存在
+	if !overwrite && utils.FileUtils.Exists(destination) {
+		return nil, fmt.Errorf("目标路径已存在: %s", destination)
+	}
+
+	// 移动文件或目录
+	if err := utils.FileUtils.MoveFile(source, destination); err != nil {
+		return nil, fmt.Errorf("移动失败: %w", err)
+	}
+
+	return map[string]interface{}{
+		"source":       source,
+		"destination":  destination,
+		"operation_id": operationID,
+	}, nil
+}
+
+// CopyItem 复制文件或目录
+func (fs *FileSystemService) CopyItem(source, destination, operationID string, overwrite bool) (map[string]interface{}, error) {
+	// 检查源路径是否存在
+	if !utils.FileUtils.Exists(source) {
+		return nil, fmt.Errorf("源路径不存在: %s", source)
+	}
+
+	// 获取源文件/目录信息
+	isDir := utils.FileUtils.IsDir(source)
+
+	var err error
+	var size int64
+
+	if isDir {
+		// 复制目录
+		opts := &utils.CopyOptions{
+			Overwrite:    overwrite,
+			SkipSymlinks: false,
+		}
+		err = utils.FileUtils.CopyDirWithOptions(source, destination, opts)
+		if err != nil {
+			return nil, fmt.Errorf("复制目录失败: %w", err)
+		}
+		// 计算目录大小
+		size, _ = utils.FileUtils.GetDirSize(destination)
+	} else {
+		// 检查目标文件是否已存在
+		if !overwrite && utils.FileUtils.Exists(destination) {
+			return nil, fmt.Errorf("目标文件已存在: %s", destination)
+		}
+		// 复制文件
+		err = utils.FileUtils.CopyFile(source, destination)
+		if err != nil {
+			return nil, fmt.Errorf("复制文件失败: %w", err)
+		}
+		size, _ = utils.FileUtils.GetFileSize(destination)
+	}
+
+	return map[string]interface{}{
+		"source":       source,
+		"destination":  destination,
+		"size":         size,
+		"operation_id": operationID,
+	}, nil
+}
+
+// SearchFiles 搜索文件
+func (fs *FileSystemService) SearchFiles(path, pattern, fileType string, recursive bool) (map[string]interface{}, error) {
+	// 检查路径是否存在
+	if !utils.FileUtils.Exists(path) {
+		return nil, fmt.Errorf("路径不存在: %s", path)
+	}
+
+	// 检查是否为目录
+	if !utils.FileUtils.IsDir(path) {
+		return nil, fmt.Errorf("路径不是目录: %s", path)
+	}
+
+	startTime := time.Now()
+
+	// 搜索文件
+	matches, err := utils.FileUtils.SearchFiles(path, pattern, recursive)
+	if err != nil {
+		return nil, fmt.Errorf("搜索文件失败: %w", err)
+	}
+
+	// 根据文件类型过滤
+	results := make([]FileSystemItem, 0)
+	for _, matchPath := range matches {
+		// 获取文件信息
+		info, err := utils.FileUtils.GetFileSize(matchPath)
+		if err != nil {
+			continue
+		}
+
+		modTime, _ := utils.FileUtils.GetModTime(matchPath)
+		ext := utils.FileUtils.GetExtension(matchPath)
+		name := utils.FileUtils.GetBaseName(matchPath)
+
+		// 判断文件类型
+		isPhoto := fs.isPhotoFile(ext)
+		isVideo := fs.isVideoFile(ext)
+
+		// 根据类型过滤
+		if fileType == "photo" && !isPhoto {
+			continue
+		}
+		if fileType == "video" && !isVideo {
+			continue
+		}
+
+		item := FileSystemItem{
+			ID:           fmt.Sprintf("file_%s", strings.ReplaceAll(matchPath, string(filepath.Separator), "_")),
+			Name:         name,
+			Path:         matchPath,
+			Type:         ItemTypeFile,
+			Size:         info,
+			ModTime:      modTime,
+			IsAccessible: true,
+		}
+
+		results = append(results, item)
+	}
+
+	duration := time.Since(startTime).Milliseconds()
+
+	return map[string]interface{}{
+		"results":             results,
+		"total_count":         len(results),
+		"search_duration_ms":  duration,
+	}, nil
+}
+
+// 辅助函数：判断是否为照片文件
+func (fs *FileSystemService) isPhotoFile(ext string) bool {
+	photoExts := []string{".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".heic", ".heif", ".raw", ".cr2", ".nef", ".arw"}
+	ext = strings.ToLower(ext)
+	for _, photoExt := range photoExts {
+		if ext == photoExt {
+			return true
+		}
+	}
+	return false
+}
+
+// 辅助函数：判断是否为视频文件
+func (fs *FileSystemService) isVideoFile(ext string) bool {
+	videoExts := []string{".mp4", ".avi", ".mov", ".wmv", ".flv", ".mkv", ".webm", ".m4v", ".mpg", ".mpeg"}
+	ext = strings.ToLower(ext)
+	for _, videoExt := range videoExts {
+		if ext == videoExt {
+			return true
+		}
+	}
+	return false
+}
