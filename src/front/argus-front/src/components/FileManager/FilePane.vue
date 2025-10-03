@@ -116,7 +116,7 @@
           @drop="handleDrop($event, item)"
         >
           <div class="file-icon">
-            {{ item.type === 'folder' ? '📁' : '🖼️' }}
+            {{ getFileIcon(item.type, item.extension) }}
           </div>
           <div class="file-name" v-html="highlightText(item.name)"></div>
           <div v-if="item.size" class="file-size">{{ item.size }}</div>
@@ -175,7 +175,7 @@
           @dragleave="handleDragLeave($event)"
           @drop="handleDrop($event, item)"
         >
-          <span class="list-icon">{{ item.type === 'folder' ? '📁' : '🖼️' }}</span>
+          <span class="list-icon">{{ getFileIcon(item.type, item.extension) }}</span>
           <span class="list-name" v-html="highlightText(item.name)"></span>
           <span class="list-size">{{ item.size || '-' }}</span>
           <span class="list-date">{{ item.date || '-' }}</span>
@@ -244,10 +244,14 @@
       v-if="isDevelopment"
       :visible="debugPanelVisible"
       :metrics="debugMetrics"
+      :use-real-api="USE_REAL_API"
+      :api-loading="fileSystemAPI.loading.value"
+      :api-error="fileSystemAPI.error.value"
       @close="debugPanelVisible = false"
       @generate="generateTestData"
       @scrollTo="handleDebugScrollTo"
       @clear="clearTestData"
+      @toggle-api="USE_REAL_API = !USE_REAL_API"
     />
 
     <!-- Debug Toggle Button (开发环境) -->
@@ -269,9 +273,11 @@ import { useKeyboardNav } from '@/composables/fileManager/useKeyboardNav'
 import { useDragSelection } from '@/composables/fileManager/useDragSelection'
 import { useDragAndDrop } from '@/composables/fileManager/useDragAndDrop'
 import { useVirtualScroll, useVirtualGrid } from '@/composables/fileManager/useVirtualScroll'
+import { useFileSystemAPI } from '@/composables/fileManager/useFileSystemAPI'
 import { moveItems, getFolderByPath, searchItems } from '@/utils/fileManager/fileOperations'
 import { mockFolderStructure as originalMockData } from './mockData'
 import type { FileItem, ViewMode, ThumbnailSize, PaneId } from './types'
+import { getFileIcon } from '@/config/fileTypes'
 import ContextMenu from './ContextMenu.vue'
 import Tooltip from './Tooltip.vue'
 import QuickPreview from './QuickPreview.vue'
@@ -283,11 +289,15 @@ const mockFolderStructure = reactive(originalMockData)
 // 开发环境标识
 const isDevelopment = import.meta.env.DEV
 
+// 文件系统 API 集成
+const fileSystemAPI = useFileSystemAPI()
+
 const props = defineProps<{
   paneId: PaneId
   viewMode: ViewMode
   thumbnailSize: ThumbnailSize
   isActive: boolean
+  useRealApi?: boolean  // 是否使用真实 API
   sortOptions: {
     field: string
     order: string
@@ -297,6 +307,9 @@ const props = defineProps<{
     fileType: string
   }
 }>()
+
+// 内部响应式状态,用于调试面板切换
+const USE_REAL_API = ref(props.useRealApi ?? false)
 
 const emit = defineEmits<{
   activate: []
@@ -382,7 +395,18 @@ const VIRTUAL_SCROLL_THRESHOLD = 100 // 超过100个项目时启用虚拟滚动
 
 // Computed
 const currentFolder = computed(() => {
-  return getFolderByPath(mockFolderStructure, currentPath.value)
+  if (USE_REAL_API.value) {
+    // 使用真实 API 时，返回一个模拟的文件夹结构
+    // 将 fileSystemAPI.fileItems 转换为 Record<string, FileItem> 格式
+    const folder: Record<string, FileItem> = {}
+    for (const item of fileSystemAPI.fileItems.value) {
+      folder[item.name] = item
+    }
+    return folder
+  } else {
+    // 使用 mock 数据
+    return getFolderByPath(mockFolderStructure, currentPath.value)
+  }
 })
 
 // 总项目数（未过滤）
@@ -588,10 +612,36 @@ function highlightText(text: string): string {
   return text.replace(regex, '<mark>$1</mark>')
 }
 
-function navigateToIndex(index: number) {
-  currentPath.value = currentPath.value.slice(0, index + 1)
-  addToHistory(currentPath.value)
-  selection.clearSelection()
+async function navigateToIndex(index: number) {
+  if (USE_REAL_API.value) {
+    // 真实 API 模式：从面包屑重建完整路径
+    const targetPath = currentPath.value.slice(0, index + 1)
+    const fullPath = targetPath.join('\\')
+
+    try {
+      // 特殊处理：如果是 "所有驱动器"，调用空路径
+      if (targetPath.length === 1 && targetPath[0] === '所有驱动器') {
+        await fileSystemAPI.browse()
+      } else {
+        await fileSystemAPI.browse(fullPath)
+      }
+
+      const pathStr = fileSystemAPI.currentPath.value
+      const breadcrumbs = pathStr ? convertPathToBreadcrumbs(pathStr) : ['所有驱动器']
+      currentPath.value = breadcrumbs
+      addToHistory(currentPath.value)
+      selection.clearSelection()
+    } catch (err) {
+      console.error('面包屑导航失败:', err)
+      alert('无法导航到该路径')
+    }
+  } else {
+    // Mock 数据模式
+    currentPath.value = currentPath.value.slice(0, index + 1)
+    addToHistory(currentPath.value)
+    selection.clearSelection()
+  }
+
   breadcrumbDropdown.value.visible = false
 }
 
@@ -610,24 +660,66 @@ function addToHistory(path: string[]) {
   historyIndex.value = history.value.length - 1
 }
 
-function goBack() {
+async function goBack() {
   if (historyIndex.value > 0) {
     historyIndex.value--
-    currentPath.value = [...history.value[historyIndex.value]]
-    selection.clearSelection()
+    const targetPath = [...history.value[historyIndex.value]]
+
+    if (USE_REAL_API.value) {
+      // 真实 API 模式：重建路径并调用 API
+      await navigateToPathArray(targetPath)
+    } else {
+      // Mock 数据模式
+      currentPath.value = targetPath
+      selection.clearSelection()
+    }
   }
 }
 
-function goForward() {
+async function goForward() {
   if (historyIndex.value < history.value.length - 1) {
     historyIndex.value++
-    currentPath.value = [...history.value[historyIndex.value]]
+    const targetPath = [...history.value[historyIndex.value]]
+
+    if (USE_REAL_API.value) {
+      // 真实 API 模式：重建路径并调用 API
+      await navigateToPathArray(targetPath)
+    } else {
+      // Mock 数据模式
+      currentPath.value = targetPath
+      selection.clearSelection()
+    }
+  }
+}
+
+// 根据路径数组导航 (真实 API 辅助函数)
+async function navigateToPathArray(pathArray: string[]) {
+  try {
+    // 特殊处理：如果是 "所有驱动器"，调用空路径
+    if (pathArray.length === 1 && pathArray[0] === '所有驱动器') {
+      await fileSystemAPI.browse()
+    } else {
+      const fullPath = pathArray.join('\\')
+      await fileSystemAPI.browse(fullPath)
+    }
+
+    const pathStr = fileSystemAPI.currentPath.value
+    const breadcrumbs = pathStr ? convertPathToBreadcrumbs(pathStr) : ['所有驱动器']
+    currentPath.value = breadcrumbs
     selection.clearSelection()
+  } catch (err) {
+    console.error('历史导航失败:', err)
+    alert('无法导航到该路径')
   }
 }
 
 // Breadcrumb dropdown
 function toggleBreadcrumbDropdown(index: number) {
+  // 真实 API 模式暂不支持面包屑下拉菜单
+  if (USE_REAL_API.value) {
+    return
+  }
+
   if (breadcrumbDropdown.value.visible && breadcrumbDropdown.value.index === index) {
     breadcrumbDropdown.value.visible = false
     return
@@ -685,7 +777,10 @@ function navigateToBreadcrumbFolder(folderName: string) {
 // Path editing
 function enterPathEditMode() {
   pathEditMode.value = true
-  pathEditValue.value = currentPath.value.join('/')
+  // 真实 API 模式使用反斜杠，Mock 模式使用正斜杠
+  pathEditValue.value = USE_REAL_API.value
+    ? currentPath.value.join('\\')
+    : currentPath.value.join('/')
   nextTick(() => {
     pathInputRef.value?.focus()
     pathInputRef.value?.select()
@@ -699,36 +794,53 @@ function exitPathEditMode() {
   }, 150)
 }
 
-function applyPathEdit() {
+async function applyPathEdit() {
   const path = pathEditValue.value.trim()
   if (!path) {
     cancelPathEdit()
     return
   }
 
-  // 解析路径
-  const segments = path.split('/').filter(s => s.trim())
-  if (segments.length === 0) {
-    cancelPathEdit()
-    return
-  }
-
-  // 验证路径是否存在
-  let folder: any = mockFolderStructure
-  for (const segment of segments) {
-    if (folder[segment] && folder[segment].children) {
-      folder = folder[segment].children
-    } else {
-      alert(`路径不存在: ${path}`)
+  if (USE_REAL_API.value) {
+    // 真实 API 模式：直接使用输入的路径
+    try {
+      await fileSystemAPI.browse(path)
+      const pathStr = fileSystemAPI.currentPath.value
+      const breadcrumbs = pathStr ? convertPathToBreadcrumbs(pathStr) : ['所有驱动器']
+      currentPath.value = breadcrumbs
+      addToHistory(currentPath.value)
+      selection.clearSelection()
+      pathEditMode.value = false
+    } catch (err) {
+      console.error('路径导航失败:', err)
+      alert(`路径不存在或无法访问: ${path}`)
+    }
+  } else {
+    // Mock 数据模式
+    // 解析路径
+    const segments = path.split('/').filter(s => s.trim())
+    if (segments.length === 0) {
+      cancelPathEdit()
       return
     }
-  }
 
-  // 应用路径
-  currentPath.value = segments
-  addToHistory(currentPath.value)
-  selection.clearSelection()
-  pathEditMode.value = false
+    // 验证路径是否存在
+    let folder: any = mockFolderStructure
+    for (const segment of segments) {
+      if (folder[segment] && folder[segment].children) {
+        folder = folder[segment].children
+      } else {
+        alert(`路径不存在: ${path}`)
+        return
+      }
+    }
+
+    // 应用路径
+    currentPath.value = segments
+    addToHistory(currentPath.value)
+    selection.clearSelection()
+    pathEditMode.value = false
+  }
 }
 
 function cancelPathEdit() {
@@ -736,10 +848,60 @@ function cancelPathEdit() {
   pathEditValue.value = ''
 }
 
-function navigateToFolder(folderName: string) {
-  currentPath.value.push(folderName)
-  addToHistory(currentPath.value)
-  selection.clearSelection()
+async function navigateToFolder(folderName: string) {
+  if (USE_REAL_API.value) {
+    // 使用真实 API - 拼接路径
+    const newPath = fileSystemAPI.currentPath.value
+      ? `${fileSystemAPI.currentPath.value}\\${folderName}`
+      : folderName
+
+    try {
+      await fileSystemAPI.browse(newPath)
+      currentPath.value = [fileSystemAPI.currentPath.value]
+      addToHistory(currentPath.value)
+      selection.clearSelection()
+    } catch (err) {
+      console.error('导航失败:', err)
+      alert('无法打开文件夹')
+    }
+  } else {
+    // 使用 mock 数据
+    currentPath.value.push(folderName)
+    addToHistory(currentPath.value)
+    selection.clearSelection()
+  }
+}
+
+// 使用完整路径导航 (真实 API 专用)
+async function navigateToFolderByPath(fullPath: string) {
+  try {
+    await fileSystemAPI.browse(fullPath)
+    // 将路径转换为面包屑数组
+    const pathStr = fileSystemAPI.currentPath.value || fullPath
+    const breadcrumbs = convertPathToBreadcrumbs(pathStr)
+    currentPath.value = breadcrumbs
+    addToHistory(currentPath.value)
+    selection.clearSelection()
+  } catch (err) {
+    console.error('导航失败:', err)
+    alert('无法打开文件夹')
+  }
+}
+
+// 将路径字符串转换为面包屑数组
+function convertPathToBreadcrumbs(path: string): string[] {
+  if (!path) return ['根目录']
+
+  // Windows 路径: C:\, D:\Users\Documents
+  // 先处理驱动器路径
+  if (/^[A-Z]:\\?$/.test(path)) {
+    // 纯驱动器，如 "C:\" 或 "C:"
+    return [path]
+  }
+
+  // 有子路径的情况
+  const parts = path.split('\\').filter(p => p)
+  return parts.length > 0 ? parts : ['根目录']
 }
 
 function isFocused(itemName: string): boolean {
@@ -769,7 +931,13 @@ function handleItemClick(event: MouseEvent, itemName: string, index: number) {
 
 function handleItemDoubleClick(item: FileItem) {
   if (item.type === 'folder') {
-    navigateToFolder(item.name)
+    if (USE_REAL_API.value && item.path) {
+      // 真实 API 模式，使用完整路径
+      navigateToFolderByPath(item.path)
+    } else {
+      // Mock 数据模式，使用名称
+      navigateToFolder(item.name)
+    }
   }
 }
 
@@ -1285,7 +1453,20 @@ function updateContainerSize() {
 }
 
 // 关闭breadcrumb dropdown 和 添加滚轮监听
-onMounted(() => {
+onMounted(async () => {
+  // 如果使用真实 API,初始化加载根目录
+  if (USE_REAL_API.value) {
+    try {
+      await fileSystemAPI.browse()  // 加载根级别（所有驱动器）
+      const pathStr = fileSystemAPI.currentPath.value
+      const breadcrumbs = pathStr ? convertPathToBreadcrumbs(pathStr) : ['所有驱动器']
+      currentPath.value = breadcrumbs
+      addToHistory(currentPath.value)
+    } catch (err) {
+      console.error('初始化文件系统失败:', err)
+    }
+  }
+
   const closeDropdown = () => {
     breadcrumbDropdown.value.visible = false
   }
@@ -1904,6 +2085,18 @@ defineExpose({
 
 .file-item[data-item-type="file"] .file-icon {
   color: #6b7280;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 8px 6px;
+  min-width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .file-name {
@@ -2047,6 +2240,18 @@ defineExpose({
 
 .list-item[data-item-type="file"] .list-icon {
   color: #6b7280;
+  font-size: 10px;
+  font-weight: 600;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  padding: 2px 4px;
+  min-width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .list-name {

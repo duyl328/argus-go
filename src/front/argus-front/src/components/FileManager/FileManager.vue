@@ -79,6 +79,7 @@
         :sort-options="paneConfigs.left.sortOptions"
         :filter-options="paneConfigs.left.filterOptions"
         :is-active="activePane === 'left'"
+        :use-real-api="props.useRealApi"
         @activate="activePane = 'left'"
       />
 
@@ -97,6 +98,7 @@
         :sort-options="paneConfigs.right.sortOptions"
         :filter-options="paneConfigs.right.filterOptions"
         :is-active="activePane === 'right'"
+        :use-real-api="props.useRealApi"
         @activate="activePane = 'right'"
       />
     </div>
@@ -107,6 +109,13 @@
 import { ref, computed } from 'vue'
 import FilePane from './FilePane.vue'
 import type { ViewMode, ThumbnailSize, LayoutMode, PaneId, SortOptions, FilterOptions } from './types'
+
+// Props
+const props = withDefaults(defineProps<{
+  useRealApi?: boolean  // 是否使用真实 API
+}>(), {
+  useRealApi: false  // 默认使用 mock 数据
+})
 
 // FilePane refs
 const leftPaneRef = ref<InstanceType<typeof FilePane>>()

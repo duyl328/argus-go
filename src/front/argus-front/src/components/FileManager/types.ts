@@ -5,6 +5,8 @@ export interface FileItem {
   type: 'folder' | 'photo' | 'video' | 'file'
   size?: string
   date?: string
+  path?: string      // 完整路径 (用于真实 API)
+  extension?: string // 文件扩展名 (用于显示)
   children?: Record<string, FileItem>
 }
 

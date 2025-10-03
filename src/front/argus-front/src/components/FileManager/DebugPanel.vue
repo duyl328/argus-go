@@ -82,6 +82,28 @@
         </table>
       </section>
 
+      <!-- API 集成状态 -->
+      <section class="debug-section">
+        <h4>🔌 API 集成</h4>
+        <table class="metrics-table">
+          <tr>
+            <td>数据源:</td>
+            <td><strong>{{ useRealApi ? '真实 API' : 'Mock 数据' }}</strong></td>
+          </tr>
+          <tr v-if="useRealApi">
+            <td>加载状态:</td>
+            <td><strong>{{ apiLoading ? '⏳ 加载中' : '✅ 就绪' }}</strong></td>
+          </tr>
+          <tr v-if="useRealApi && apiError">
+            <td>错误信息:</td>
+            <td class="error-text"><strong>{{ apiError }}</strong></td>
+          </tr>
+        </table>
+        <button @click="$emit('toggle-api')" class="btn-primary" style="width: 100%; margin-top: 8px;">
+          {{ useRealApi ? '切换到 Mock 数据' : '切换到真实 API' }}
+        </button>
+      </section>
+
       <!-- 操作按钮 -->
       <section class="debug-section">
         <h4>⚡ 快速操作</h4>
@@ -116,6 +138,9 @@ interface DebugMetrics {
 const props = defineProps<{
   visible: boolean
   metrics: DebugMetrics
+  useRealApi?: boolean
+  apiLoading?: boolean
+  apiError?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -123,6 +148,7 @@ const emit = defineEmits<{
   (e: 'generate', count: number): void
   (e: 'scrollTo', position: 'top' | 'bottom' | 'middle'): void
   (e: 'clear'): void
+  (e: 'toggle-api'): void
 }>()
 
 const testCount = ref(1000)
@@ -309,6 +335,15 @@ function clearData() {
 .metrics-table strong {
   color: #00ff00;
   font-weight: bold;
+}
+
+.metrics-table .error-text {
+  color: #ff0000;
+  font-size: 10px;
+}
+
+.metrics-table .error-text strong {
+  color: #ff4444;
 }
 
 .action-buttons {

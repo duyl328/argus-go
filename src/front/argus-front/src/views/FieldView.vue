@@ -1,6 +1,6 @@
 <template>
   <div class="field-view">
-    <FileManager ref="fileManagerRef" />
+    <FileManager ref="fileManagerRef" :use-real-api="true" />
   </div>
 </template>
 
