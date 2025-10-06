@@ -1,0 +1,56 @@
+### SSE 订阅管理 API 测试
+
+### 1. 连接 SSE（浏览器中手动测试）
+### 在浏览器控制台运行：
+### const eventSource = new EventSource('http://127.0.0.1:9484/api/v1/sse/connect')
+### eventSource.onmessage = (e) => console.log(e.data)
+
+### 2. 获取所有客户端
+GET http://127.0.0.1:9484/api/v1/sse/clients
+Content-Type: application/json
+
+###
+
+### 3. 订阅路径（请先从上一步获取 client_id）
+POST http://127.0.0.1:9484/api/v1/sse/subscribe
+Content-Type: application/json
+
+{
+  "client_id": "your-client-id-here",
+  "path": "D:\\EdgeDownload"
+}
+
+###
+
+### 4. 获取客户端订阅列表
+GET http://127.0.0.1:9484/api/v1/sse/subscriptions/your-client-id-here
+Content-Type: application/json
+
+###
+
+### 5. 取消订阅
+POST http://127.0.0.1:9484/api/v1/sse/unsubscribe
+Content-Type: application/json
+
+{
+  "client_id": "your-client-id-here",
+  "path": "D:\\EdgeDownload"
+}
+
+###
+
+### 6. 测试文件系统变化监听
+POST http://127.0.0.1:9484/api/v1/filesystem/watch
+Content-Type: application/json
+
+{
+  "path": "D:\\EdgeDownload"
+}
+
+###
+
+### 7. 停止文件系统监听
+DELETE http://127.0.0.1:9484/api/v1/filesystem/watch?path=D:\EdgeDownload
+Content-Type: application/json
+
+###

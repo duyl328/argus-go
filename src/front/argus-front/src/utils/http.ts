@@ -132,18 +132,32 @@ class HttpClient {
 
         logB.error('响应错误:', error)
 
-        // 统一错误处理
-        this.handleError(error)
+        // 统一错误处理并提取详细错误信息
+        const errorMessage = this.handleError(error)
         console.groupEnd()
-        return Promise.reject(error)
+
+        // 返回一个包含详细错误信息的 Error 对象
+        const enhancedError = new Error(errorMessage)
+        // 保留原始错误信息
+        ;(enhancedError as any).originalError = error
+        ;(enhancedError as any).response = error.response
+
+        return Promise.reject(enhancedError)
       },
     )
   }
 
   /**
    * 统一错误处理
+   * @returns 提取的错误信息
    */
-  private handleError(error: AxiosError<ApiResponse>): void {
+  private handleError(error: AxiosError<ApiResponse>): string {
+    // 忽略请求取消错误（这是正常的防重复请求机制）
+    if (axios.isCancel(error) || error.name === 'CanceledError') {
+      logS.info('请求已取消（防重复请求）')
+      return '请求已取消'
+    }
+
     let message = '网络错误'
 
     if (error.response) {
@@ -177,6 +191,7 @@ class HttpClient {
       message = '网络连接异常'
     }
     logB.error(message)
+    return message
   }
 
   /**

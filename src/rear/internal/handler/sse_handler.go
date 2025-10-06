@@ -13,7 +13,7 @@ import (
 )
 
 type SSEHandler struct {
-	manager *sse.Manager
+	Manager *sse.Manager // 公开字段以便其他 Handler 访问
 }
 
 type SSEResponse struct {
@@ -32,19 +32,26 @@ type ClientInfo struct {
 
 func NewSSEHandler() *SSEHandler {
 	opts := sse.DefaultOptions()
-	opts.PingInterval = 30 * time.Second
+	opts.PingInterval = 10 * time.Second  // 10秒心跳，配合 keepalive 的 5秒
 	opts.MaxClients = 500
 	opts.EventBufferSize = 200
-	
+
 	manager := sse.NewManager(opts)
-	
+
 	return &SSEHandler{
-		manager: manager,
+		Manager: manager,
 	}
 }
 
 func (h *SSEHandler) HandleSSEConnection(c *gin.Context) {
-	h.manager.RegisterClient(c)
+	// 添加日志确认方法被调用
+	fmt.Printf("==== SSE HandleSSEConnection called, client IP: %s ====\n", c.ClientIP())
+
+	// 对于 SSE 连接，需要设置无限期的超时
+	// 通过设置 deadline 为很远的未来时间来绕过 WriteTimeout
+	c.Request.Context()
+
+	h.Manager.RegisterClient(c)
 }
 
 func (h *SSEHandler) BroadcastMessage(c *gin.Context) {
@@ -62,16 +69,16 @@ func (h *SSEHandler) BroadcastMessage(c *gin.Context) {
 	}
 	
 	if request.EventType != "" {
-		h.manager.BroadcastEvent(request.EventType, request.Message)
+		h.Manager.BroadcastEvent(request.EventType, request.Message)
 	} else {
-		h.manager.Broadcast(request.Message)
+		h.Manager.Broadcast(request.Message)
 	}
 	
 	c.JSON(http.StatusOK, SSEResponse{
 		Success: true,
 		Message: "Message broadcasted successfully",
 		Data: map[string]interface{}{
-			"client_count": h.manager.GetClientCount(),
+			"client_count": h.Manager.GetClientCount(),
 			"message":      request.Message,
 			"event_type":   request.EventType,
 		},
@@ -100,7 +107,7 @@ func (h *SSEHandler) SendToClient(c *gin.Context) {
 		return
 	}
 	
-	success := h.manager.SendToClient(clientID, request.Message)
+	success := h.Manager.SendToClient(clientID, request.Message)
 	if !success {
 		c.JSON(http.StatusNotFound, SSEResponse{
 			Success: false,
@@ -120,11 +127,11 @@ func (h *SSEHandler) SendToClient(c *gin.Context) {
 }
 
 func (h *SSEHandler) GetClients(c *gin.Context) {
-	clientIDs := h.manager.GetClientIDs()
+	clientIDs := h.Manager.GetClientIDs()
 	clients := make([]ClientInfo, 0, len(clientIDs))
 	
 	for _, id := range clientIDs {
-		if client, exists := h.manager.GetClientInfo(id); exists {
+		if client, exists := h.Manager.GetClientInfo(id); exists {
 			clients = append(clients, ClientInfo{
 				ID:          client.ID,
 				RemoteAddr:  client.RemoteAddr,
@@ -155,7 +162,7 @@ func (h *SSEHandler) GetClientInfo(c *gin.Context) {
 		return
 	}
 	
-	client, exists := h.manager.GetClientInfo(clientID)
+	client, exists := h.Manager.GetClientInfo(clientID)
 	if !exists {
 		c.JSON(http.StatusNotFound, SSEResponse{
 			Success: false,
@@ -189,7 +196,7 @@ func (h *SSEHandler) DisconnectClient(c *gin.Context) {
 		return
 	}
 	
-	h.manager.UnregisterClient(clientID)
+	h.Manager.UnregisterClient(clientID)
 	
 	c.JSON(http.StatusOK, SSEResponse{
 		Success: true,
@@ -202,8 +209,8 @@ func (h *SSEHandler) DisconnectClient(c *gin.Context) {
 
 func (h *SSEHandler) GetStats(c *gin.Context) {
 	stats := map[string]interface{}{
-		"total_clients":   h.manager.GetClientCount(),
-		"client_ids":      h.manager.GetClientIDs(),
+		"total_clients":   h.Manager.GetClientCount(),
+		"client_ids":      h.Manager.GetClientIDs(),
 		"server_time":     time.Now().Format(time.RFC3339),
 		"uptime_seconds":  time.Since(time.Now().Add(-time.Hour)).Seconds(), // 示例值
 	}
@@ -239,7 +246,7 @@ func (h *SSEHandler) TestEvent(c *gin.Context) {
 			}
 			
 			messageJSON, _ := json.Marshal(message)
-			h.manager.BroadcastEvent(eventType, string(messageJSON))
+			h.Manager.BroadcastEvent(eventType, string(messageJSON))
 			
 			time.Sleep(time.Duration(intervalDur) * time.Second)
 		}
@@ -257,11 +264,115 @@ func (h *SSEHandler) TestEvent(c *gin.Context) {
 }
 
 func (h *SSEHandler) GetEventChannel() chan<- string {
-	return h.manager.GetEventChannel()
+	return h.Manager.GetEventChannel()
 }
 
 func (h *SSEHandler) Close() {
-	if h.manager != nil {
-		h.manager.Close()
+	if h.Manager != nil {
+		h.Manager.Close()
 	}
+}
+
+// ============ 订阅管理接口 ============
+
+// Subscribe 客户端订阅指定路径
+// POST /api/v1/sse/subscribe
+func (h *SSEHandler) Subscribe(c *gin.Context) {
+	var request struct {
+		ClientID string `json:"client_id" binding:"required"`
+		Path     string `json:"path" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, SSEResponse{
+			Success: false,
+			Message: "Invalid request format: " + err.Error(),
+		})
+		return
+	}
+
+	err := h.Manager.Subscribe(request.ClientID, request.Path)
+	if err != nil {
+		c.JSON(http.StatusNotFound, SSEResponse{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, SSEResponse{
+		Success: true,
+		Message: "Subscribed successfully",
+		Data: map[string]interface{}{
+			"client_id": request.ClientID,
+			"path":      request.Path,
+		},
+	})
+}
+
+// Unsubscribe 客户端取消订阅指定路径
+// POST /api/v1/sse/unsubscribe
+func (h *SSEHandler) Unsubscribe(c *gin.Context) {
+	var request struct {
+		ClientID string `json:"client_id" binding:"required"`
+		Path     string `json:"path" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, SSEResponse{
+			Success: false,
+			Message: "Invalid request format: " + err.Error(),
+		})
+		return
+	}
+
+	err := h.Manager.Unsubscribe(request.ClientID, request.Path)
+	if err != nil {
+		c.JSON(http.StatusNotFound, SSEResponse{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, SSEResponse{
+		Success: true,
+		Message: "Unsubscribed successfully",
+		Data: map[string]interface{}{
+			"client_id": request.ClientID,
+			"path":      request.Path,
+		},
+	})
+}
+
+// GetClientSubscriptions 获取客户端的所有订阅
+// GET /api/v1/sse/subscriptions/:clientId
+func (h *SSEHandler) GetClientSubscriptions(c *gin.Context) {
+	clientID := c.Param("clientId")
+	if clientID == "" {
+		c.JSON(http.StatusBadRequest, SSEResponse{
+			Success: false,
+			Message: "Client ID is required",
+		})
+		return
+	}
+
+	subscriptions, err := h.Manager.GetSubscriptions(clientID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, SSEResponse{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, SSEResponse{
+		Success: true,
+		Message: "Subscriptions retrieved successfully",
+		Data: map[string]interface{}{
+			"client_id":     clientID,
+			"subscriptions": subscriptions,
+			"count":         len(subscriptions),
+		},
+	})
 }

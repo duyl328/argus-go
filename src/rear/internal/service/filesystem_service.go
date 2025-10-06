@@ -99,8 +99,19 @@ func (fs *FileSystemService) Browse(path string) (*FileSystemResponse, error) {
 		return fs.getRootLevel()
 	}
 
-	// 清理路径
-	path = filepath.Clean(path)
+	// 清理路径，但需要特殊处理 Windows 驱动器根路径
+	// filepath.Clean("D:") 会变成 "D:." 导致前端面包屑出现问题
+	cleanPath := filepath.Clean(path)
+
+	// Windows 驱动器根路径修正：将 "D:." 转换为 "D:\"
+	if runtime.GOOS == "windows" {
+		// 匹配 "C:.", "D:." 等模式
+		if len(cleanPath) == 3 && cleanPath[1] == ':' && cleanPath[2] == '.' {
+			cleanPath = cleanPath[:2] + "\\"
+		}
+	}
+
+	path = cleanPath
 
 	// 检查路径是否存在
 	if !utils.FileUtils.Exists(path) {

@@ -8,6 +8,17 @@
       <!-- Breadcrumb Navigation -->
       <div class="breadcrumb">
         <div v-if="!pathEditMode" class="breadcrumb-content">
+          <!-- 根目录图标 (真实 API 模式下显示) -->
+          <span
+            v-if="USE_REAL_API"
+            :class="['breadcrumb-home', { current: currentPath.length === 1 && currentPath[0] === '所有驱动器' }]"
+            @click.stop="navigateToRoot"
+            title="返回所有驱动器"
+          >
+            🏠
+          </span>
+          <span v-if="USE_REAL_API && currentPath[0] !== '所有驱动器'" class="separator">›</span>
+
           <span
             v-for="(segment, index) in currentPath"
             :key="index"
@@ -268,6 +279,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, reactive } from 'vue'
+import { useMessage } from 'naive-ui'
 import { useFileSelection } from '@/composables/fileManager/useFileSelection'
 import { useKeyboardNav } from '@/composables/fileManager/useKeyboardNav'
 import { useDragSelection } from '@/composables/fileManager/useDragSelection'
@@ -283,6 +295,9 @@ import Tooltip from './Tooltip.vue'
 import QuickPreview from './QuickPreview.vue'
 import DebugPanel from './DebugPanel.vue'
 
+// Naive UI
+const message = useMessage()
+
 // 将 mockData 转换为响应式对象（全局共享）
 const mockFolderStructure = reactive(originalMockData)
 
@@ -297,7 +312,8 @@ const props = defineProps<{
   viewMode: ViewMode
   thumbnailSize: ThumbnailSize
   isActive: boolean
-  useRealApi?: boolean  // 是否使用真实 API
+  isDialogOpen?: boolean  // 是否有对话框打开（禁用快捷键）
+  useRealApi?: boolean    // 是否使用真实 API
   sortOptions: {
     field: string
     order: string
@@ -313,6 +329,12 @@ const USE_REAL_API = ref(props.useRealApi ?? false)
 
 const emit = defineEmits<{
   activate: []
+  delete: []     // 删除选中项
+  copy: []       // 复制选中项
+  cut: []        // 剪切选中项
+  paste: []      // 粘贴
+  refresh: []    // 刷新
+  goBack: []     // 后退
 }>()
 
 // State
@@ -395,13 +417,17 @@ const VIRTUAL_SCROLL_THRESHOLD = 100 // 超过100个项目时启用虚拟滚动
 
 // Computed
 const currentFolder = computed(() => {
+  console.log('🔄 [FilePane.currentFolder] computed 重新计算')
+
   if (USE_REAL_API.value) {
     // 使用真实 API 时，返回一个模拟的文件夹结构
-    // 将 fileSystemAPI.fileItems 转换为 Record<string, FileItem> 格式
+    // 注意: 这个 computed 主要用于 fileStats 计算
+    // visibleItems 已经直接使用 fileSystemAPI.fileItems 了
     const folder: Record<string, FileItem> = {}
     for (const item of fileSystemAPI.fileItems.value) {
       folder[item.name] = item
     }
+    console.log('✅ [FilePane.currentFolder] 返回:', Object.keys(folder).length, '个项目')
     return folder
   } else {
     // 使用 mock 数据
@@ -444,18 +470,39 @@ function handleHeaderSort(field: string) {
 }
 
 const visibleItems = computed(() => {
-  if (!currentFolder.value) return []
+  console.log('🔄 [FilePane.visibleItems] computed 重新计算')
 
-  let items = Object.values(currentFolder.value)
+  // 🟢 修复: 直接使用 fileItems 避免响应式断裂
+  if (USE_REAL_API.value) {
+    let items = fileSystemAPI.fileItems.value
+    console.log('✅ [FilePane.visibleItems] 使用真实 API, 原始项目数:', items.length)
 
-  // 文件名搜索过滤
-  if (props.filterOptions.nameQuery.trim()) {
-    const query = props.filterOptions.nameQuery.toLowerCase()
-    items = items.filter(item => item.name.toLowerCase().includes(query))
+    // 文件名搜索过滤
+    if (props.filterOptions.nameQuery.trim()) {
+      const query = props.filterOptions.nameQuery.toLowerCase()
+      items = items.filter(item => item.name.toLowerCase().includes(query))
+      console.log('🔍 [FilePane.visibleItems] 搜索过滤后:', items.length, '个项目')
+    }
+
+    // 排序
+    const sorted = sortItems(items, props.sortOptions.field, props.sortOptions.order)
+    console.log('✅ [FilePane.visibleItems] 最终返回:', sorted.length, '个项目')
+    return sorted
+  } else {
+    // Mock 数据逻辑保持不变
+    if (!currentFolder.value) return []
+
+    let items = Object.values(currentFolder.value)
+
+    // 文件名搜索过滤
+    if (props.filterOptions.nameQuery.trim()) {
+      const query = props.filterOptions.nameQuery.toLowerCase()
+      items = items.filter(item => item.name.toLowerCase().includes(query))
+    }
+
+    // 排序
+    return sortItems(items, props.sortOptions.field, props.sortOptions.order)
   }
-
-  // 排序
-  return sortItems(items, props.sortOptions.field, props.sortOptions.order)
 })
 
 // 判断是否需要启用虚拟滚动
@@ -612,6 +659,21 @@ function highlightText(text: string): string {
   return text.replace(regex, '<mark>$1</mark>')
 }
 
+// 导航到根目录（所有驱动器）
+async function navigateToRoot() {
+  if (!USE_REAL_API.value) return
+
+  try {
+    await fileSystemAPI.browse()  // 空路径 = 根级别
+    currentPath.value = ['所有驱动器']
+    addToHistory(currentPath.value)
+    selection.clearSelection()
+  } catch (err) {
+    console.error('返回根目录失败:', err)
+    message.error('无法返回根目录')
+  }
+}
+
 async function navigateToIndex(index: number) {
   if (USE_REAL_API.value) {
     // 真实 API 模式：从面包屑重建完整路径
@@ -633,7 +695,7 @@ async function navigateToIndex(index: number) {
       selection.clearSelection()
     } catch (err) {
       console.error('面包屑导航失败:', err)
-      alert('无法导航到该路径')
+      message.error('无法导航到该路径')
     }
   } else {
     // Mock 数据模式
@@ -813,7 +875,7 @@ async function applyPathEdit() {
       pathEditMode.value = false
     } catch (err) {
       console.error('路径导航失败:', err)
-      alert(`路径不存在或无法访问: ${path}`)
+      message.error(`路径不存在或无法访问: ${path}`)
     }
   } else {
     // Mock 数据模式
@@ -830,7 +892,7 @@ async function applyPathEdit() {
       if (folder[segment] && folder[segment].children) {
         folder = folder[segment].children
       } else {
-        alert(`路径不存在: ${path}`)
+        message.error(`路径不存在: ${path}`)
         return
       }
     }
@@ -862,7 +924,7 @@ async function navigateToFolder(folderName: string) {
       selection.clearSelection()
     } catch (err) {
       console.error('导航失败:', err)
-      alert('无法打开文件夹')
+      message.error('无法打开文件夹')
     }
   } else {
     // 使用 mock 数据
@@ -893,6 +955,9 @@ function convertPathToBreadcrumbs(path: string): string[] {
   if (!path) return ['根目录']
 
   // Windows 路径: C:\, D:\Users\Documents
+  // 先清理可能的 "." 后缀（filepath.Clean 可能添加）
+  path = path.replace(/^([A-Z]:)\.$/, '$1\\')
+
   // 先处理驱动器路径
   if (/^[A-Z]:\\?$/.test(path)) {
     // 纯驱动器，如 "C:\" 或 "C:"
@@ -900,7 +965,7 @@ function convertPathToBreadcrumbs(path: string): string[] {
   }
 
   // 有子路径的情况
-  const parts = path.split('\\').filter(p => p)
+  const parts = path.split('\\').filter(p => p && p !== '.')  // 过滤掉空字符串和 "."
   return parts.length > 0 ? parts : ['根目录']
 }
 
@@ -1163,11 +1228,11 @@ function handleContextMenuAction(action: string, params?: any) {
     case 'rename':
     case 'properties':
       // TODO: 实现这些操作
-      alert(`执行操作: ${action}`)
+      message.info(`执行操作: ${action}`)
       break
 
     case 'newFolder':
-      alert('创建新文件夹')
+      message.info('创建新文件夹功能将在工具栏实现')
       break
 
     case 'selectAll':
@@ -1510,6 +1575,7 @@ useKeyboardNav({
   items: computed(() => visibleItems.value),
   viewMode: computed(() => props.viewMode),
   isActive: computed(() => props.isActive),
+  isDialogOpen: computed(() => props.isDialogOpen ?? false),
   focusedItem: selection.focusedItem,
   anchorItem: selection.anchorItem,
   selectedItems: selection.selectedItems,
@@ -1568,6 +1634,34 @@ useKeyboardNav({
   },
   onSelectAll: () => {
     selection.selectAll(visibleItems.value)
+  },
+  onDelete: () => {
+    // 检查是否有选中项
+    if (selection.selectedItems.value.size > 0) {
+      emit('delete')
+    }
+  },
+  onCopy: () => {
+    // 检查是否有选中项
+    if (selection.selectedItems.value.size > 0) {
+      emit('copy')
+    }
+  },
+  onCut: () => {
+    // 检查是否有选中项
+    if (selection.selectedItems.value.size > 0) {
+      emit('cut')
+    }
+  },
+  onPaste: () => {
+    emit('paste')
+  },
+  onRefresh: () => {
+    emit('refresh')
+  },
+  onBack: () => {
+    // 后退到上一级目录
+    emit('goBack')
   },
   getGridColumns
 })
@@ -1670,11 +1764,48 @@ function handleDebugScrollTo(position: 'top' | 'bottom' | 'middle') {
 }
 
 // 暴露方法给父组件
+// 获取选中的项目
+function getSelectedItems(): FileItem[] {
+  const selectedArray: FileItem[] = []
+  selection.selectedItems.value.forEach(name => {
+    const item = visibleItems.value.find(item => item.name === name)
+    if (item) {
+      selectedArray.push(item)
+    }
+  })
+  return selectedArray
+}
+
+// 获取当前路径
+function getCurrentPath(): string {
+  if (USE_REAL_API.value) {
+    return fileSystemAPI.currentPath.value
+  } else {
+    return currentPath.value.join('/')
+  }
+}
+
+// 刷新当前目录
+async function refresh() {
+  if (USE_REAL_API.value) {
+    try {
+      await fileSystemAPI.browse(fileSystemAPI.currentPath.value)
+    } catch (err) {
+      console.error('刷新失败:', err)
+    }
+  } else {
+    // Mock 模式不需要刷新
+  }
+}
+
 defineExpose({
   goBack,
   goForward,
   generateTestData,  // 暴露给外部调试使用
-  clearTestData
+  clearTestData,
+  getSelectedItems,  // 暴露给 FileManager
+  getCurrentPath,    // 暴露给 FileManager
+  refresh            // 暴露给 FileManager
 })
 </script>
 
@@ -1839,6 +1970,27 @@ defineExpose({
 
 .path-edit-cancel:hover {
   background: #dc2626;
+}
+
+/* 根目录图标 */
+.breadcrumb-home {
+  font-size: 18px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+}
+
+.breadcrumb-home:hover {
+  background: #f3f4f6;
+  transform: scale(1.1);
+}
+
+.breadcrumb-home.current {
+  background: rgba(59, 130, 246, 0.1);
 }
 
 .breadcrumb-item {

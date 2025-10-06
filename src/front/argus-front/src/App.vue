@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { NConfigProvider, NMessageProvider, NGlobalStyle, lightTheme, darkTheme } from 'naive-ui'
+import { NConfigProvider, NMessageProvider, NDialogProvider, NGlobalStyle, lightTheme, darkTheme } from 'naive-ui'
 import AppLayout from '@/components/Layout/AppLayout.vue'
 import { useThemeStore } from '@/stores/theme'
 
@@ -21,9 +21,11 @@ onMounted(() => {
   <n-config-provider :theme="naiveTheme">
     <n-global-style />
     <n-message-provider>
-      <div class="app-container">
-        <AppLayout />
-      </div>
+      <n-dialog-provider>
+        <div class="app-container">
+          <AppLayout />
+        </div>
+      </n-dialog-provider>
     </n-message-provider>
   </n-config-provider>
 </template>

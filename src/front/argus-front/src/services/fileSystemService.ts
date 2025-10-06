@@ -216,6 +216,32 @@ class FileSystemService {
     })
     return response.data
   }
+
+  /**
+   * 订阅文件夹监听
+   * @param path 要监听的路径
+   */
+  async watchPath(path: string): Promise<void> {
+    await httpClient.post('/v1/filesystem/watch', { path })
+  }
+
+  /**
+   * 取消文件夹监听
+   * @param path 要取消监听的路径
+   */
+  async unwatchPath(path: string): Promise<void> {
+    await httpClient.post('/v1/filesystem/unwatch', { path })
+  }
+
+  /**
+   * 获取当前监听的路径列表
+   */
+  async getWatchedPaths(): Promise<string[]> {
+    const response = await httpClient.get<{ count: number; paths: string[] }>(
+      '/v1/filesystem/watched'
+    )
+    return response.data.paths || []
+  }
 }
 
 // 导出单例实例

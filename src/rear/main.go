@@ -230,16 +230,17 @@ func startHttp(con *container.DbContainer, imgContain *container.TaskContainer) 
 		pprof.Register(r)
 	}
 
-	// 设置路由
-	router.SetupRoutes(r, con, imgContain)
+	// 设置路由，并获取清理函数
+	cleanup := router.SetupRoutes(r, con, imgContain)
 
-	// 创建HTTP服务器
+	// 创建主 HTTP 服务器（所有请求，WriteTimeout = 0）
+	// 注意：WriteTimeout = 0 适用于本地使用，生产环境建议使用反向代理分离
 	srv := &http.Server{
 		Addr:         ":" + config.CONFIG.Port,
 		Handler:      r,
-		ReadTimeout:  config.CONFIG.ReadTimeout,
-		WriteTimeout: config.CONFIG.WriteTimeout,
-		IdleTimeout:  config.CONFIG.IdleTimeout,
+		ReadTimeout:  config.CONFIG.ReadTimeout,  // 30秒
+		WriteTimeout: 0,                          // 0 = 无限期（本地使用）
+		IdleTimeout:  config.CONFIG.IdleTimeout,  // 10分钟
 	}
 
 	// 优雅关闭
@@ -248,7 +249,7 @@ func startHttp(con *container.DbContainer, imgContain *container.TaskContainer) 
 
 	// 启动服务器
 	go func() {
-		logger.Infof("Server starting on port 127.0.0.1:%s", config.CONFIG.Port)
+		logger.Infof("Server starting on 127.0.0.1:%s (WriteTimeout=0 for SSE support)", config.CONFIG.Port)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatalf("Failed to start server: %v", err)
 			// 发送信号给主goroutine，让它知道启动失败
@@ -260,14 +261,20 @@ func startHttp(con *container.DbContainer, imgContain *container.TaskContainer) 
 	<-quit
 	logger.Info("Shutting down server...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// 先清理资源（关闭 SSE 连接和文件监听器）
+	logger.Info("Cleaning up resources...")
+	cleanup()
+	logger.Info("Resources cleaned up")
+
+	// 然后关闭 HTTP 服务器
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		logger.Fatalf("Server forced to shutdown: %v", err)
+		logger.Errorf("Server forced to shutdown: %v", err)
+	} else {
+		logger.Info("Server exited gracefully")
 	}
-
-	logger.Info("Server exited")
 }
 
 // initializeToolDependencies 初始化工具依赖（仅在开发阶段）

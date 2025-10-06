@@ -122,8 +122,8 @@ func GetDefaultFileConfig() *FileConfig {
 			Port:         getEnv("PORT", "8080"),
 			Mode:         getEnv("GIN_MODE", "debug"),
 			ReadTimeout:  30 * time.Second,
-			WriteTimeout: 30 * time.Second,
-			IdleTimeout:  60 * time.Second,
+			WriteTimeout: 0, // SSE 需要长连接，设置为 0（无限期）
+			IdleTimeout:  10 * time.Minute, // 空闲超时设置为 10 分钟
 			Development:  nil, // 默认不设置，表示生产阶段
 		},
 		Tools: ToolsConfig{

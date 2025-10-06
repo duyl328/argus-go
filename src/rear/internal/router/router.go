@@ -7,8 +7,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// CleanupFunc 清理函数类型
+type CleanupFunc func()
+
 // SetupRoutes 设置路由
-func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *container.TaskContainer) {
+// 返回一个清理函数，用于在服务器关闭时清理资源
+func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *container.TaskContainer) CleanupFunc {
 	// 默认访问
 	r.GET("/", handler.BasicResponse)
 
@@ -21,8 +25,11 @@ func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *cont
 	exifHandler := handler.NewExifHandler(contain)
 	photoHandler := handler.NewPhotoHandler(contain, imgContain)
 
-	// 文件系统处理
-	fileSystemHandler := handler.NewFileSystemHandler()
+	// SSE 实时通信处理
+	sseHandler := handler.NewSSEHandler()
+
+	// 文件系统处理 (需要 SSE Manager)
+	fileSystemHandler := handler.NewFileSystemHandler(sseHandler.Manager)
 	fileOperationsHandler := handler.NewFileOperationsHandler()
 
 	// API版本组
@@ -82,6 +89,24 @@ func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *cont
 			assets.GET("/:hash", photoHandler.GetPhotoAssets) // 获取图像详细信息
 		}
 
+		// SSE 实时通信路由
+		sse := v1.Group("/sse")
+		{
+			sse.GET("/connect", sseHandler.HandleSSEConnection)            // SSE 连接
+			sse.POST("/broadcast", sseHandler.BroadcastMessage)            // 广播消息
+			sse.POST("/send/:clientId", sseHandler.SendToClient)           // 发送给特定客户端
+			sse.GET("/clients", sseHandler.GetClients)                     // 获取所有客户端
+			sse.GET("/clients/:clientId", sseHandler.GetClientInfo)        // 获取客户端信息
+			sse.DELETE("/clients/:clientId", sseHandler.DisconnectClient)  // 断开客户端
+			sse.GET("/stats", sseHandler.GetStats)                         // 获取统计信息
+			sse.GET("/test", sseHandler.TestEvent)                         // 测试事件
+
+			// 订阅管理路由
+			sse.POST("/subscribe", sseHandler.Subscribe)                          // 订阅路径
+			sse.POST("/unsubscribe", sseHandler.Unsubscribe)                      // 取消订阅
+			sse.GET("/subscriptions/:clientId", sseHandler.GetClientSubscriptions) // 获取订阅列表
+		}
+
 		// 文件系统相关路由
 		filesystem := v1.Group("/filesystem")
 		{
@@ -95,6 +120,11 @@ func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *cont
 			filesystem.DELETE("/item", fileOperationsHandler.DeleteItem)           // 删除文件或目录
 			filesystem.PUT("/item/move", fileOperationsHandler.MoveItem)           // 移动/重命名
 			filesystem.POST("/item/copy", fileOperationsHandler.CopyItem)          // 复制文件或目录
+
+			// 文件系统监听相关路由
+			filesystem.POST("/watch", fileSystemHandler.WatchPath)                 // 订阅文件夹监听
+			filesystem.POST("/unwatch", fileSystemHandler.UnwatchPath)             // 取消文件夹监听
+			filesystem.GET("/watched", fileSystemHandler.GetWatchedPaths)          // 获取监听路径列表
 		}
 	}
 	// 开发组
@@ -102,5 +132,18 @@ func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *cont
 	{
 		// 处理图片格式
 		dev.GET("/tool/exiftool/get_exif", devImageHandler.GetExif)
+	}
+
+	// 返回清理函数
+	return func() {
+		// 关闭 SSE Manager
+		if sseHandler != nil && sseHandler.Manager != nil {
+			sseHandler.Manager.Close()
+		}
+
+		// 关闭文件系统监听器
+		if fileSystemHandler != nil && fileSystemHandler.GetFileWatcher() != nil {
+			fileSystemHandler.GetFileWatcher().Close()
+		}
 	}
 }
