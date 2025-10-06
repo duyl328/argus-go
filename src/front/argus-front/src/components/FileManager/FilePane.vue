@@ -126,8 +126,13 @@
           @dragleave="handleDragLeave($event)"
           @drop="handleDrop($event, item)"
         >
-          <div class="file-icon">
-            {{ getFileIcon(item.type, item.extension) }}
+          <!-- 图片缩略图或图标 -->
+          <div
+            class="file-icon"
+            :class="{ 'has-thumbnail': item.type === 'photo' && item.path }"
+            :style="item.type === 'photo' && item.path ? getThumbnailStyle(item.path) : {}"
+          >
+            <span v-if="item.type !== 'photo' || !item.path">{{ getFileIcon(item.type, item.extension) }}</span>
           </div>
           <div class="file-name" v-html="highlightText(item.name)"></div>
           <div v-if="item.size" class="file-size">{{ item.size }}</div>
@@ -186,7 +191,13 @@
           @dragleave="handleDragLeave($event)"
           @drop="handleDrop($event, item)"
         >
-          <span class="list-icon">{{ getFileIcon(item.type, item.extension) }}</span>
+          <span
+            class="list-icon"
+            :class="{ 'has-thumbnail': item.type === 'photo' && item.path }"
+            :style="item.type === 'photo' && item.path ? getThumbnailStyle(item.path, true) : {}"
+          >
+            <span v-if="item.type !== 'photo' || !item.path">{{ getFileIcon(item.type, item.extension) }}</span>
+          </span>
           <span class="list-name" v-html="highlightText(item.name)"></span>
           <span class="list-size">{{ item.size || '-' }}</span>
           <span class="list-date">{{ item.date || '-' }}</span>
@@ -274,6 +285,15 @@
     >
       🔬
     </button>
+
+    <!-- Photo Preview Modal -->
+    <PhotoPreviewModal
+      v-model:visible="previewVisible"
+      :file-path="previewFilePath"
+      :file-name="previewFileName"
+      :file-size="previewFileSize"
+      @close="handlePreviewClose"
+    />
   </div>
 </template>
 
@@ -294,6 +314,7 @@ import ContextMenu from './ContextMenu.vue'
 import Tooltip from './Tooltip.vue'
 import QuickPreview from './QuickPreview.vue'
 import DebugPanel from './DebugPanel.vue'
+import PhotoPreviewModal from './PhotoPreviewModal.vue'
 
 // Naive UI
 const message = useMessage()
@@ -375,6 +396,12 @@ const quickPreview = ref({
 
 // Debug Panel (开发环境)
 const debugPanelVisible = ref(false)
+
+// Photo Preview (照片预览)
+const previewVisible = ref(false)
+const previewFilePath = ref('')
+const previewFileName = ref('')
+const previewFileSize = ref<number | undefined>(undefined)
 
 const debugMetrics = computed(() => {
   const total = visibleItems.value.length
@@ -1614,22 +1641,28 @@ useKeyboardNav({
   },
   onSpace: (event: KeyboardEvent) => {
     event.preventDefault()
+    event.stopPropagation()
 
-    // 如果预览已打开，关闭预览
-    if (quickPreview.value.visible) {
-      quickPreview.value.visible = false
-      quickPreview.value.item = null
+    // 获取当前焦点项
+    const focused = selection.focusedItem.value
+    if (!focused) return
+
+    const item = visibleItems.value[focused.index]
+    if (!item) return
+
+    // 如果是照片，使用新的照片预览
+    if (item.type === 'photo') {
+      handlePhotoPreview(item)
       return
     }
 
-    // 打开预览
-    const focused = selection.focusedItem.value
-    if (focused) {
-      const item = visibleItems.value[focused.index]
-      if (item) {
-        quickPreview.value.visible = true
-        quickPreview.value.item = item
-      }
+    // 其他类型使用旧的快速预览（文件夹、其他文件）
+    if (quickPreview.value.visible) {
+      quickPreview.value.visible = false
+      quickPreview.value.item = null
+    } else {
+      quickPreview.value.visible = true
+      quickPreview.value.item = item
     }
   },
   onSelectAll: () => {
@@ -1761,6 +1794,65 @@ function handleDebugScrollTo(position: 'top' | 'bottom' | 'middle') {
   }
 
   console.log(`🎯 滚动到${position === 'top' ? '顶部' : position === 'bottom' ? '底部' : '中间'}`)
+}
+
+// 预览照片
+function handlePhotoPreview(item: FileItem) {
+  // 只预览照片类型
+  if (item.type !== 'photo') {
+    message.info('仅支持预览照片文件')
+    return
+  }
+
+  // 获取文件路径
+  const filePath = item.path || ''
+  if (!filePath) {
+    message.error('无法获取文件路径')
+    return
+  }
+
+  // 设置预览信息
+  previewFilePath.value = filePath
+  previewFileName.value = item.name
+  previewFileSize.value = item.size ? parseFileSize(item.size) : undefined
+  previewVisible.value = true
+}
+
+// 解析文件大小字符串为字节数
+function parseFileSize(sizeStr: string): number | undefined {
+  const match = sizeStr.match(/^([\d.]+)\s*(B|KB|MB|GB)$/i)
+  if (!match) return undefined
+
+  const value = parseFloat(match[1])
+  const unit = match[2].toUpperCase()
+
+  switch (unit) {
+    case 'B': return value
+    case 'KB': return value * 1024
+    case 'MB': return value * 1024 * 1024
+    case 'GB': return value * 1024 * 1024 * 1024
+    default: return undefined
+  }
+}
+
+// 关闭预览
+function handlePreviewClose() {
+  previewVisible.value = false
+}
+
+// 获取缩略图样式
+function getThumbnailStyle(filePath: string, isListView = false) {
+  if (!filePath) return {}
+
+  const size = isListView ? 200 : 300 // 列表视图用小尺寸，网格视图用大尺寸
+  const thumbnailUrl = `${import.meta.env.VITE_APP_API_URL || 'http://127.0.0.1:9484/api'}/v1/photo/preview?path=${encodeURIComponent(filePath)}&size=${size}`
+
+  return {
+    backgroundImage: `url(${thumbnailUrl})`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat'
+  }
 }
 
 // 暴露方法给父组件
@@ -2219,6 +2311,27 @@ defineExpose({
   font-size: 40px;
   margin-bottom: 4px;
   flex-shrink: 0;
+  position: relative;
+}
+
+/* 图片缩略图样式 */
+.file-icon.has-thumbnail {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.grid-small .file-icon.has-thumbnail {
+  width: 60px;
+  height: 60px;
+}
+
+.grid-large .file-icon.has-thumbnail {
+  width: 120px;
+  height: 120px;
 }
 
 /* 网格视图文件类型图标颜色 */
@@ -2374,6 +2487,19 @@ defineExpose({
 
 .list-icon {
   font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 列表视图图片缩略图样式 */
+.list-icon.has-thumbnail {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 /* 文件类型图标颜色 */

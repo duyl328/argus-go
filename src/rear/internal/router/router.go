@@ -73,7 +73,8 @@ func SetupRoutes(r *gin.Engine, contain *container.DbContainer, imgContain *cont
 		// 照片相关路由
 		photo := v1.Group("/photo")
 		{
-			photo.GET("/:hash", photoHandler.GetPhoto) // 获取图像文件
+			photo.GET("/:hash", photoHandler.GetPhoto)        // 获取图像文件
+			photo.GET("/preview", photoHandler.GetPhotoPreview) // 预览图片（通过路径）
 		}
 
 		// 照片列表相关路由

@@ -531,6 +531,55 @@ func (h *PhotoHandler) GetPhotos(c *gin.Context) {
 	})
 }
 
+// GetPhotoPreview 快速预览接口
+// GET /api/v1/photo/preview?path=/path/to/photo.CR2&size=720
+func (h *PhotoHandler) GetPhotoPreview(c *gin.Context) {
+	path := c.Query("path")
+	if path == "" {
+		c.JSON(http.StatusBadRequest, model.Response{
+			Code:    http.StatusBadRequest,
+			Message: "Missing path parameter",
+		})
+		return
+	}
+
+	sizeParam := c.DefaultQuery("size", "720")
+	size, err := strconv.Atoi(sizeParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, model.Response{
+			Code:    http.StatusBadRequest,
+			Message: "Invalid size parameter",
+		})
+		return
+	}
+
+	// 创建 ImageAPI（会自动计算 Hash 并检测格式）
+	imageAPI, err := api.NewImageAPI(path)
+	if err != nil {
+		logger.Error("创建ImageAPI失败", zap.String("path", path), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, model.Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to process image",
+		})
+		return
+	}
+
+	// 获取图片路径（ImageAPI 内部会处理格式转换和缩略图生成）
+	imagePath, err := imageAPI.GetImagePath(size)
+	if err != nil {
+		logger.Error("获取图片路径失败", zap.String("path", path), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, model.Response{
+			Code:    http.StatusInternalServerError,
+			Message: "Failed to get image",
+		})
+		return
+	}
+
+	// 设置响应头并返回文件
+	h.setImageHeaders(c, imagePath, imageAPI.GetFormat())
+	c.File(imagePath)
+}
+
 // setImageHeaders 设置图像响应头
 func (h *PhotoHandler) setImageHeaders(c *gin.Context, imagePath, format string) {
 	// 设置Content-Type
