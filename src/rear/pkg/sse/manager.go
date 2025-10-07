@@ -447,13 +447,33 @@ func (m *Manager) writeEvent(w io.Writer, event *Event) error {
 }
 
 func (m *Manager) UnregisterClient(clientID string) {
+	// 双重检查：确保 manager 未关闭
+	select {
+	case <-m.ctx.Done():
+		// Manager 已关闭，直接返回
+		return
+	default:
+		// Manager 仍在运行，继续注销流程
+	}
+
 	select {
 	case m.unregisterChan <- clientID:
 	case <-time.After(1 * time.Second):
+		// 超时也要检查是否因为 manager 关闭导致
+	case <-m.ctx.Done():
+		// 发送过程中 manager 关闭
+		return
 	}
 }
 
 func (m *Manager) Broadcast(message string) {
+	// 检查 manager 是否已关闭
+	select {
+	case <-m.ctx.Done():
+		return
+	default:
+	}
+
 	event := &Event{
 		ID:   uuid.New().String(),
 		Data: message,
@@ -462,10 +482,19 @@ func (m *Manager) Broadcast(message string) {
 	select {
 	case m.broadcastChan <- event:
 	case <-time.After(1 * time.Second):
+	case <-m.ctx.Done():
+		return
 	}
 }
 
 func (m *Manager) BroadcastEvent(eventType, message string) {
+	// 检查 manager 是否已关闭
+	select {
+	case <-m.ctx.Done():
+		return
+	default:
+	}
+
 	// 验证数据有效性
 	if message == "" {
 		fmt.Printf("Warning: 尝试广播空消息，事件类型: %s\n", eventType)
@@ -500,10 +529,20 @@ func (m *Manager) BroadcastEvent(eventType, message string) {
 		fmt.Printf("SSE事件已发送: type=%q, data_length=%d\n", eventType, len(message))
 	case <-time.After(1 * time.Second):
 		fmt.Printf("Warning: SSE事件发送超时: type=%q\n", eventType)
+	case <-m.ctx.Done():
+		// Manager 关闭中，放弃发送
+		return
 	}
 }
 
 func (m *Manager) SendToClient(clientID, message string) bool {
+	// 检查 manager 是否已关闭
+	select {
+	case <-m.ctx.Done():
+		return false
+	default:
+	}
+
 	m.clientsMutex.RLock()
 	client, exists := m.clients[clientID]
 	m.clientsMutex.RUnlock()
@@ -522,6 +561,8 @@ func (m *Manager) SendToClient(clientID, message string) bool {
 		return true
 	case <-time.After(100 * time.Millisecond):
 		go m.UnregisterClient(clientID)
+		return false
+	case <-m.ctx.Done():
 		return false
 	}
 }
@@ -561,19 +602,36 @@ func (m *Manager) GetClientInfo(clientID string) (*Client, bool) {
 }
 
 func (m *Manager) Close() {
+	// 1. 取消 context，通知所有 goroutines 退出
 	m.cancel()
 
+	// 2. 给 goroutines 一些时间优雅退出
+	time.Sleep(100 * time.Millisecond)
+
+	// 3. 关闭所有客户端连接
 	m.clientsMutex.Lock()
 	for _, client := range m.clients {
-		close(client.CloseChan)
+		// 安全关闭 CloseChan（检查是否已关闭）
+		select {
+		case <-client.CloseChan:
+			// 已经关闭，跳过
+		default:
+			close(client.CloseChan)
+		}
 	}
 	m.clients = make(map[string]*Client)
 	m.clientsMutex.Unlock()
 
+	// 4. 再等待一小段时间确保所有发送操作完成
+	time.Sleep(50 * time.Millisecond)
+
+	// 5. 最后关闭所有 channels
 	close(m.broadcastChan)
 	close(m.registerChan)
 	close(m.unregisterChan)
 	close(m.eventChan)
+
+	fmt.Println("SSE Manager 已安全关闭")
 }
 
 // ============ 订阅管理方法 ============
