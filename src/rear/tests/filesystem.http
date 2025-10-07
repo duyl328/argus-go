@@ -1,7 +1,7 @@
 ### Argus 照片管理系统 - 文件系统管理测试
 ### 这个文件展示了如何使用文件系统管理API
 ### 服务器地址
-@baseUrl = http://localhost:8080
+@baseUrl = http://localhost:3001
 @apiBase = {{baseUrl}}/api/v1
 
 ### ===== 文件系统浏览功能 =====
