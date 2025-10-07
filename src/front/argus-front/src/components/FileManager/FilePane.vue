@@ -293,6 +293,7 @@
       :file-name="previewFileName"
       :file-size="previewFileSize"
       @close="handlePreviewClose"
+      @navigate="handlePreviewNavigate"
     />
   </div>
 </template>
@@ -315,6 +316,7 @@ import Tooltip from './Tooltip.vue'
 import QuickPreview from './QuickPreview.vue'
 import DebugPanel from './DebugPanel.vue'
 import PhotoPreviewModal from './PhotoPreviewModal.vue'
+import { httpClient } from '@/utils/http'
 
 // Naive UI
 const message = useMessage()
@@ -1030,6 +1032,9 @@ function handleItemDoubleClick(item: FileItem) {
       // Mock 数据模式，使用名称
       navigateToFolder(item.name)
     }
+  } else if (item.type === 'photo') {
+    // 双击照片：打开预览
+    handlePhotoPreview(item)
   }
 }
 
@@ -1798,6 +1803,13 @@ function handleDebugScrollTo(position: 'top' | 'bottom' | 'middle') {
 
 // 预览照片
 function handlePhotoPreview(item: FileItem) {
+  console.log('🖼️ [FilePane.handlePhotoPreview] 开始预览:', {
+    name: item.name,
+    type: item.type,
+    path: item.path,
+    size: item.size
+  })
+
   // 只预览照片类型
   if (item.type !== 'photo') {
     message.info('仅支持预览照片文件')
@@ -1808,14 +1820,80 @@ function handlePhotoPreview(item: FileItem) {
   const filePath = item.path || ''
   if (!filePath) {
     message.error('无法获取文件路径')
+    console.error('❌ [FilePane.handlePhotoPreview] 文件路径为空')
     return
   }
+
+  // 解析文件大小
+  const fileSize = item.size ? parseFileSize(item.size) : undefined
+  console.log('📏 [FilePane.handlePhotoPreview] 文件大小:', {
+    原始: item.size,
+    解析后字节: fileSize
+  })
 
   // 设置预览信息
   previewFilePath.value = filePath
   previewFileName.value = item.name
-  previewFileSize.value = item.size ? parseFileSize(item.size) : undefined
+  previewFileSize.value = fileSize
   previewVisible.value = true
+
+  console.log('✅ [FilePane.handlePhotoPreview] 预览窗口已打开')
+}
+
+// 预览时导航（使用键盘导航逻辑）
+function handlePreviewNavigate(key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown') {
+  // 找到当前预览文件在 visibleItems 中的索引
+  const currentIndex = visibleItems.value.findIndex(item => item.path === previewFilePath.value)
+  if (currentIndex === -1) return
+
+  // 使用键盘导航的计算逻辑来获取新索引
+  const gridColumns = getGridColumns()
+  let newIndex = currentIndex
+
+  switch (key) {
+    case 'ArrowLeft':
+      newIndex = currentIndex - 1
+      if (newIndex < 0) newIndex = visibleItems.value.length - 1  // 循环
+      break
+    case 'ArrowRight':
+      newIndex = currentIndex + 1
+      if (newIndex >= visibleItems.value.length) newIndex = 0  // 循环
+      break
+    case 'ArrowUp':
+      newIndex = currentIndex - gridColumns
+      if (newIndex < 0) {
+        // 跳到最后一行对应列
+        const col = currentIndex % gridColumns
+        const lastRow = Math.floor((visibleItems.value.length - 1) / gridColumns)
+        newIndex = lastRow * gridColumns + col
+        if (newIndex >= visibleItems.value.length) {
+          newIndex = visibleItems.value.length - 1
+        }
+      }
+      break
+    case 'ArrowDown':
+      newIndex = currentIndex + gridColumns
+      if (newIndex >= visibleItems.value.length) {
+        // 跳到第一行对应列
+        const col = currentIndex % gridColumns
+        newIndex = col
+      }
+      break
+  }
+
+  // 切换到新文件
+  const newItem = visibleItems.value[newIndex]
+  if (!newItem) return
+
+  // 更新选中状态（同步到文件列表）
+  selection.clearSelection()
+  selection.selectItem(newItem.name, newIndex)
+  selection.setFocusedItem(newItem.name, newIndex)
+
+  // 更新预览内容
+  previewFilePath.value = newItem.path || ''
+  previewFileName.value = newItem.name
+  previewFileSize.value = newItem.size ? parseFileSize(newItem.size) : undefined
 }
 
 // 解析文件大小字符串为字节数
@@ -1845,10 +1923,13 @@ function getThumbnailStyle(filePath: string, isListView = false) {
   if (!filePath) return {}
 
   const size = isListView ? 200 : 300 // 列表视图用小尺寸，网格视图用大尺寸
-  const thumbnailUrl = `${import.meta.env.VITE_APP_API_URL || 'http://127.0.0.1:9484/api'}/v1/photo/preview?path=${encodeURIComponent(filePath)}&size=${size}`
+
+  // 使用 httpClient 的 baseURL,确保与其他 API 请求保持一致
+  const baseURL = httpClient.getAxiosInstance().defaults.baseURL || 'http://127.0.0.1:9484/api'
+  const thumbnailUrl = `${baseURL}/v1/photo/preview?path=${encodeURIComponent(filePath)}&size=${size}`
 
   return {
-    backgroundImage: `url(${thumbnailUrl})`,
+    backgroundImage: `url("${thumbnailUrl}")`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat'

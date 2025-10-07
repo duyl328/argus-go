@@ -24,37 +24,76 @@ class PhotoPreviewService {
     const encodedPath = encodeURIComponent(filePath)
 
     if (!fileSize) {
-      // 未知文件大小，默认加载 720p 缩略图
-      return `${httpClient.getAxiosInstance().defaults.baseURL}${this.baseUrl}?path=${encodedPath}&size=720`
+      // 未知文件大小，默认加载 512p 缩略图（更快的初始加载）
+      return `${httpClient.getAxiosInstance().defaults.baseURL}${this.baseUrl}?path=${encodedPath}&size=512`
     }
 
     const MB = 1024 * 1024
 
-    if (fileSize < 5 * MB) {
-      // 小于 5MB：直接加载原图
+    if (fileSize < MB) {
+      // <1MB：直接加载原图（小文件）
       return `${httpClient.getAxiosInstance().defaults.baseURL}${this.baseUrl}?path=${encodedPath}&size=0`
-    } else if (fileSize < 20 * MB) {
-      // 5-20MB：加载 1080p 缩略图
+    } else if (fileSize < 5 * MB) {
+      // 1-5MB：加载 1080p 缩略图
       return `${httpClient.getAxiosInstance().defaults.baseURL}${this.baseUrl}?path=${encodedPath}&size=1080`
+    } else if (fileSize < 20 * MB) {
+      // 5-20MB：加载 512p 缩略图（初始）
+      return `${httpClient.getAxiosInstance().defaults.baseURL}${this.baseUrl}?path=${encodedPath}&size=512`
     } else {
-      // 超过 20MB：加载 720p 缩略图
-      return `${httpClient.getAxiosInstance().defaults.baseURL}${this.baseUrl}?path=${encodedPath}&size=720`
+      // 超过 20MB：加载 512p 缩略图（最小尺寸）
+      return `${httpClient.getAxiosInstance().defaults.baseURL}${this.baseUrl}?path=${encodedPath}&size=512`
     }
   }
 
   /**
-   * 获取所有级别的预览 URL
+   * 获取所有级别的预览 URL（按文件大小智能选择）
    * @param filePath 文件路径
+   * @param fileSize 文件大小（字节，可选）
    * @returns 包含不同分辨率的 URL 对象
    */
-  getAllPreviewUrls(filePath: string): PreviewUrls {
+  getAllPreviewUrls(filePath: string, fileSize?: number): PreviewUrls {
     const encodedPath = encodeURIComponent(filePath)
     const baseURL = httpClient.getAxiosInstance().defaults.baseURL
 
-    return {
-      thumbnail: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=720`,
-      highRes: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=2048`,
-      original: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=0`
+    if (!fileSize) {
+      // 默认策略：三级加载
+      return {
+        thumbnail: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=512`,
+        highRes: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=1080`,
+        original: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=0`
+      }
+    }
+
+    const MB = 1024 * 1024
+
+    if (fileSize < MB) {
+      // <1MB：只需一级（直接原图）
+      return {
+        thumbnail: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=0`,
+        highRes: '',
+        original: ''
+      }
+    } else if (fileSize < 5 * MB) {
+      // 1-5MB：两级加载
+      return {
+        thumbnail: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=512`,
+        highRes: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=1080`,
+        original: ''
+      }
+    } else if (fileSize < 20 * MB) {
+      // 5-20MB：三级加载
+      return {
+        thumbnail: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=512`,
+        highRes: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=1080`,
+        original: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=2048`
+      }
+    } else {
+      // 20MB以上：四级加载（包含4K）
+      return {
+        thumbnail: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=512`,
+        highRes: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=2048`,
+        original: `${baseURL}${this.baseUrl}?path=${encodedPath}&size=4096`
+      }
     }
   }
 
