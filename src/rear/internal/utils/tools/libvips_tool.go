@@ -459,3 +459,119 @@ func QuickSmartCrop(ctx context.Context, inputPath, outputPath string, width, he
 	}
 	return CropVipsImage(ctx, inputPath, outputPath, width, height, options)
 }
+
+// TileGenerationOptions 瓦片生成选项
+type TileGenerationOptions struct {
+	TileSize   int    // 瓦片大小（正方形边长，默认256）
+	Overlap    int    // 瓦片重叠像素（默认0）
+	Layout     string // 布局方式: "dz" (DeepZoom), "google", "zoomify"
+	Quality    int    // JPEG质量（1-100）
+	OutputDir  string // 输出目录
+	Background string // 背景颜色（用于填充不完整的瓦片）
+}
+
+// GenerateTiles 生成图片瓦片（用于超大图的渐进式加载）
+// 使用 Deep Zoom Image (DZI) 格式
+func GenerateTiles(ctx context.Context, inputPath string, options *TileGenerationOptions) error {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
+		return err
+	}
+
+	if options == nil {
+		options = &TileGenerationOptions{
+			TileSize: 256,
+			Quality:  85,
+			Layout:   "dz",
+		}
+	}
+
+	// 设置默认值
+	if options.TileSize <= 0 {
+		options.TileSize = 256
+	}
+	if options.Quality <= 0 {
+		options.Quality = 85
+	}
+	if options.Layout == "" {
+		options.Layout = "dz"
+	}
+
+	// 构建vips dzsave命令参数
+	args := []string{"dzsave", inputPath, options.OutputDir}
+
+	// 添加瓦片大小参数
+	args = append(args, "--tile-size", strconv.Itoa(options.TileSize))
+
+	// 添加重叠参数
+	if options.Overlap > 0 {
+		args = append(args, "--overlap", strconv.Itoa(options.Overlap))
+	}
+
+	// 添加质量参数
+	if options.Quality > 0 {
+		args = append(args, "--Q", strconv.Itoa(options.Quality))
+	}
+
+	// 添加布局参数
+	switch options.Layout {
+	case "google":
+		args = append(args, "--layout", "google")
+	case "zoomify":
+		args = append(args, "--layout", "zoomify")
+	default:
+		args = append(args, "--layout", "dz")
+	}
+
+	// 添加背景颜色（如果指定）
+	if options.Background != "" {
+		args = append(args, "--background", options.Background)
+	}
+
+	result, err := utils.ExecuteCommand(ctx, utils.VipsPath, args...)
+	if err != nil {
+		return fmt.Errorf("vips dzsave failed: %w, stderr: %s", err, string(result.Stderr))
+	}
+
+	return nil
+}
+
+// GenerateProgressive 生成渐进式JPEG（用于网络传输优化）
+func GenerateProgressive(ctx context.Context, inputPath, outputPath string, quality int) error {
+	if err := utils.EnsureInitialized(nil, nil); err != nil {
+		return err
+	}
+
+	if quality <= 0 {
+		quality = 85
+	}
+
+	args := []string{"jpegsave", inputPath, outputPath,
+		"--Q", strconv.Itoa(quality),
+		"--interlace", // 渐进式JPEG
+		"--optimize-coding", // 优化编码
+		"--strip", // 移除元数据
+	}
+
+	result, err := utils.ExecuteCommand(ctx, utils.VipsPath, args...)
+	if err != nil {
+		return fmt.Errorf("vips progressive jpeg failed: %w, stderr: %s", err, string(result.Stderr))
+	}
+
+	return nil
+}
+
+// GetImageLevels 计算图片金字塔层级数（用于瓦片生成）
+func GetImageLevels(width, height, tileSize int) int {
+	maxDimension := width
+	if height > maxDimension {
+		maxDimension = height
+	}
+
+	levels := 0
+	for maxDimension > tileSize {
+		maxDimension = maxDimension / 2
+		levels++
+	}
+
+	return levels + 1
+}

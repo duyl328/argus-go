@@ -479,8 +479,36 @@ func (api *ImageAPI) ProcessImage() error {
 	}
 	logger.Info("格式转换完成", zap.String("path", supportedPath))
 
-	// 3. 生成缩略图
-	if err := api.generateAllThumbnails(ctx); err != nil {
+	// 3. 获取图像信息以判断处理策略
+	imageInfo, err := tools.GetVipsImageInfo(ctx, supportedPath)
+	if err != nil {
+		return fmt.Errorf("获取图像信息失败: %w", err)
+	}
+
+	// 获取文件大小
+	fileInfo, err := os.Stat(api.path)
+	if err != nil {
+		return fmt.Errorf("获取文件信息失败: %w", err)
+	}
+	fileSize := fileInfo.Size()
+
+	// 4. 根据文件大小和尺寸决定处理策略
+	if api.ShouldGenerateTiles(fileSize, imageInfo.Width, imageInfo.Height) {
+		// 超大图：生成瓦片
+		logger.Info("检测到超大图片，将生成瓦片",
+			zap.String("path", api.path),
+			zap.Int64("file_size", fileSize),
+			zap.Int("width", imageInfo.Width),
+			zap.Int("height", imageInfo.Height))
+
+		if err := api.GenerateTiles(ctx); err != nil {
+			logger.Error("瓦片生成失败", zap.Error(err))
+			// 瓦片生成失败，继续生成常规缩略图
+		}
+	}
+
+	// 5. 生成缩略图（使用智能策略）
+	if err := api.generateSmartThumbnails(ctx, fileSize); err != nil {
 		return fmt.Errorf("生成缩略图失败: %w", err)
 	}
 
@@ -511,6 +539,35 @@ func (api *ImageAPI) generateAllThumbnails(ctx context.Context) error {
 	return nil
 }
 
+// generateSmartThumbnails 根据文件大小智能生成缩略图
+func (api *ImageAPI) generateSmartThumbnails(ctx context.Context, fileSize int64) error {
+	// 使用智能策略获取需要生成的缩略图尺寸
+	thumbnailSizes := api.GetSmartThumbnailSizes(fileSize)
+
+	logger.Info("开始生成智能缩略图",
+		zap.String("path", api.path),
+		zap.Int64("file_size", fileSize),
+		zap.Ints("sizes", thumbnailSizes))
+
+	for _, size := range thumbnailSizes {
+		thumbnailPath, err := api.GetImagePath(size)
+		if err != nil {
+			logger.Warn("生成缩略图失败",
+				zap.String("path", api.path),
+				zap.Int("size", size),
+				zap.Error(err))
+			continue // 某个尺寸失败不影响其他尺寸
+		}
+
+		logger.Debug("生成缩略图完成",
+			zap.String("original", api.path),
+			zap.String("thumbnail", thumbnailPath),
+			zap.Int("size", size))
+	}
+
+	return nil
+}
+
 // getThumbnailSizes 获取需要预生成的缩略图尺寸
 func (api *ImageAPI) getThumbnailSizes() []int {
 	// 从配置中获取，如果没有配置则使用默认值
@@ -518,11 +575,117 @@ func (api *ImageAPI) getThumbnailSizes() []int {
 		return config.CONFIG.ImageCompressionOption.ThumbnailSize
 	}
 
-	// 默认缩略图尺寸
-	return []int{800}
+	// 默认缩略图尺寸 - 多级渐进式加载
+	// 512: 预览缩略图, 1080: 中等画质, 2048: 高清, 4096: 超高清
+	return []int{512, 1080, 2048, 4096}
+}
+
+// GetSmartThumbnailSizes 根据文件大小智能选择缩略图尺寸
+// fileSize: 文件大小（字节）
+// 返回: 需要生成的缩略图尺寸列表
+func (api *ImageAPI) GetSmartThumbnailSizes(fileSize int64) []int {
+	const MB = 1024 * 1024
+
+	// <1MB: 只生成一个小缩略图用于列表显示
+	if fileSize < MB {
+		return []int{512}
+	}
+
+	// 1-5MB: 生成两级缩略图
+	if fileSize < 5*MB {
+		return []int{512, 1080}
+	}
+
+	// 5-20MB: 生成三级缩略图（渐进式加载）
+	if fileSize < 20*MB {
+		return []int{512, 1080, 2048}
+	}
+
+	// 20MB以上: 生成完整的四级缩略图
+	return []int{512, 1080, 2048, 4096}
+}
+
+// ShouldGenerateTiles 判断是否应该生成瓦片
+// 对于超大图片（>50MB或尺寸>10000px），使用瓦片方式加载性能更好
+func (api *ImageAPI) ShouldGenerateTiles(fileSize int64, width, height int) bool {
+	const (
+		SIZE_THRESHOLD      = 50 * 1024 * 1024 // 50MB
+		DIMENSION_THRESHOLD = 10000            // 10000像素
+	)
+
+	return fileSize > SIZE_THRESHOLD ||
+		width > DIMENSION_THRESHOLD ||
+		height > DIMENSION_THRESHOLD
+}
+
+// GenerateTiles 为超大图生成瓦片
+func (api *ImageAPI) GenerateTiles(ctx context.Context) error {
+	// 获取原图路径
+	supportedPath, err := api.GetSupportOriginalImagePath(ctx)
+	if err != nil {
+		return fmt.Errorf("获取原图路径失败: %w", err)
+	}
+
+	// 计算瓦片输出目录
+	tilesDir := api.GetTilesDirectory()
+	if err := os.MkdirAll(tilesDir, 0755); err != nil {
+		return fmt.Errorf("创建瓦片目录失败: %w", err)
+	}
+
+	// 生成瓦片
+	options := &tools.TileGenerationOptions{
+		TileSize:  256,
+		Overlap:   1,
+		Quality:   config.CONFIG.ImageCompressionOption.ThumbnailQuality,
+		OutputDir: filepath.Join(tilesDir, "tiles"),
+		Layout:    "dz",
+	}
+
+	err = tools.GenerateTiles(ctx, supportedPath, options)
+	if err != nil {
+		return fmt.Errorf("生成瓦片失败: %w", err)
+	}
+
+	logger.Info("瓦片生成成功",
+		zap.String("hash", api.hash),
+		zap.String("tiles_dir", tilesDir))
+
+	return nil
+}
+
+// GetTilesDirectory 获取瓦片存储目录
+func (api *ImageAPI) GetTilesDirectory() string {
+	thumbnailBasePath := filepath.Join(config.CONFIG.AppDir, config.CONFIG.PathConfig.CachePath, config.CONFIG.PathConfig.ThumbnailPath)
+	return utils.HashUtils.HashThumbPath(thumbnailBasePath, api.hash, "tiles", "")
+}
+
+// HasTiles 检查是否已生成瓦片
+func (api *ImageAPI) HasTiles() bool {
+	tilesDir := api.GetTilesDirectory()
+	dziFile := filepath.Join(tilesDir, "tiles.dzi")
+	return utils.FileUtils.Exists(dziFile)
 }
 
 // CompressedImg 压缩图片获取路径
 func (api *ImageAPI) CompressedImg(longSide int) (string, error) {
 	return api.GetImagePath(longSide)
+}
+
+// ReadFileWithLimit 读取文件内容（限制大小）
+func ReadFileWithLimit(filePath string, maxSize int64) ([]byte, error) {
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("获取文件信息失败: %w", err)
+	}
+
+	if fileInfo.Size() > maxSize {
+		return nil, fmt.Errorf("文件过大: %d bytes (max: %d)", fileInfo.Size(), maxSize)
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("读取文件失败: %w", err)
+	}
+
+	return data, nil
 }
