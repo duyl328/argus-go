@@ -3,8 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"github.com/h2non/filetype"
-	"go.uber.org/zap"
 	"os"
 	"path/filepath"
 	"rear/internal/config"
@@ -15,6 +13,9 @@ import (
 	"rear/pkg/utils"
 	"strconv"
 	"strings"
+
+	"github.com/h2non/filetype"
+	"go.uber.org/zap"
 )
 
 type ImageAPI struct {
