@@ -50,6 +50,7 @@ venv.bak/
 go.work
 
 # Logs
+/src/rear/log.md
 logs/
 *.log
 npm-debug.log*

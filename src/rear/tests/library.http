@@ -13,7 +13,7 @@ POST {{apiBase}}/library
 Content-Type: application/json
 
 {
-  "path": "E:/整合/kkimkkimmy/Pic"
+  "path": "C:/Photos/Example"
 }
 
 ### 更新图像库状态
@@ -21,7 +21,7 @@ PUT {{apiBase}}/library
 Content-Type: application/json
 
 {
-  "path": "E:/整合/kkimkkimmy/Pic",
+  "path": "C:/Photos/Example",
   "is_enable": true
 }
 
